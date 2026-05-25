@@ -93,8 +93,8 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
     <div class="hdr-row">
       <div class="logo">S</div>
       <div>
-        <div class="hdr-title">SERN Expense Tool</div>
-        <div class="hdr-sub">Mission &amp; Travel Reimbursement</div>
+        <div class="hdr-title">SERN Mission Management Tool</div>
+        <div class="hdr-sub">Authorization &amp; Expense Management</div>
       </div>
     </div>
   </div>
@@ -225,7 +225,7 @@ function r1(){
   EMP.forEach(e=>{
     const d=document.createElement("div");
     d.className="emp-card"+(ST.emp?.id===e.id?" sel":"");
-    d.innerHTML=`<div class="emp-name">${e.name}</div><div class="emp-base">${e.base}</div><span class="emp-badge">${e.km?"🚗 KM":"📋 Std"}</span>`;
+    d.innerHTML=`<div class="emp-name">${e.name}</div><div class="emp-base">${e.base}</div><span class="emp-badge">${e.id==="nicola"?"🚗 KM":e.km?"":"📋 Std"}</span>`;
     d.onclick=()=>{ST.emp=e;ST.kmApproved=(e.id==="nicola");render()};
     eg.appendChild(d);
   });
