@@ -1,0 +1,476 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>SERN Mission Expense Tool</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Georgia',serif;background:#EBF4FB;min-height:100vh;display:flex;justify-content:center}
+#app{max-width:500px;width:100%;min-height:100vh;display:flex;flex-direction:column;background:#fff;box-shadow:0 4px 32px rgba(31,78,121,.18)}
+.hdr{background:#1F4E79;padding:15px 18px 11px;position:sticky;top:0;z-index:10}
+.hdr-row{display:flex;align-items:center;gap:10px}
+.logo{width:36px;height:36px;background:#C9A84C;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:700;color:#1F4E79;flex-shrink:0}
+.hdr-title{font-size:17px;font-weight:700;color:#fff}
+.hdr-sub{font-size:10px;color:#A8C8E8;text-transform:uppercase;letter-spacing:.06em;margin-top:2px;font-family:sans-serif}
+.steps{display:flex;background:#1F4E79;padding:10px 18px 14px}
+.step-item{flex:1;display:flex;flex-direction:column;align-items:center;position:relative}
+.step-item:not(:last-child)::after{content:'';position:absolute;top:13px;left:50%;width:100%;height:2px;background:rgba(255,255,255,.2);z-index:0}
+.step-item.done:not(:last-child)::after{background:#C9A84C}
+.step-circle{width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;position:relative;z-index:1;border:2px solid rgba(255,255,255,.22);color:rgba(255,255,255,.4);background:rgba(255,255,255,.1);font-family:sans-serif}
+.step-item.active .step-circle{background:#C9A84C;border-color:#C9A84C;color:#1F4E79;box-shadow:0 0 0 3px rgba(201,168,76,.3)}
+.step-item.done .step-circle{background:#C9A84C;border-color:#C9A84C;color:#1F4E79}
+.step-label{font-size:9px;color:rgba(255,255,255,.35);margin-top:5px;text-transform:uppercase;letter-spacing:.06em;font-family:sans-serif}
+.step-item.active .step-label{color:#C9A84C}
+.step-item.done .step-label{color:rgba(255,255,255,.65)}
+.content{flex:1;padding:18px;overflow-y:auto}
+.footer{padding:14px 18px;border-top:1px solid #E8EEF5;background:#fff;position:sticky;bottom:0}
+.sec-title{font-size:18px;font-weight:700;color:#1F4E79;margin-bottom:4px}
+.sec-sub{font-size:13px;color:#4A6880;margin-bottom:16px;line-height:1.5;font-family:sans-serif}
+.field{margin-bottom:14px}
+.lbl{display:block;font-size:10px;font-weight:700;color:#2D6A9F;text-transform:uppercase;letter-spacing:.07em;margin-bottom:5px;font-family:sans-serif}
+.req{color:#C9A84C}
+input[type=text],input[type=date],input[type=number],select{width:100%;padding:10px 12px;border:1.5px solid #E8EEF5;border-radius:6px;font-family:sans-serif;font-size:14px;color:#1A2E42;background:#fff;outline:none;appearance:none;-webkit-appearance:none}
+input:focus,select:focus{border-color:#2D6A9F;box-shadow:0 0 0 3px rgba(45,106,159,.12)}
+.emp-grid{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-bottom:14px}
+.emp-card{border:2px solid #E8EEF5;border-radius:10px;padding:11px 9px;cursor:pointer;text-align:center;background:#fff;transition:.15s all}
+.emp-card.sel{border-color:#1F4E79;background:#D6E4F0}
+.emp-name{font-size:15px;font-weight:700;color:#1F4E79}
+.emp-base{font-size:11px;color:#4A6880;margin-top:2px;font-family:sans-serif}
+.emp-badge{display:inline-block;margin-top:5px;font-size:10px;font-weight:700;padding:2px 7px;border-radius:20px;background:#F5EDD4;color:#C9A84C;font-family:sans-serif}
+.emp-card.sel .emp-badge{background:#1F4E79;color:#fff}
+.type-row{display:flex;gap:8px;margin-bottom:14px}
+.type-btn{flex:1;padding:10px 6px;border:2px solid #E8EEF5;border-radius:6px;background:#fff;cursor:pointer;font-size:12px;font-weight:500;color:#4A6880;font-family:sans-serif;text-align:center}
+.type-btn.sel{border-color:#1F4E79;background:#1F4E79;color:#fff}
+.btn-primary{width:100%;padding:13px;background:#1F4E79;color:#fff;border:none;border-radius:7px;font-size:14px;font-weight:600;cursor:pointer;font-family:sans-serif}
+.btn-primary:disabled{opacity:.5;cursor:not-allowed}
+.btn-secondary{flex:1;padding:12px;background:#fff;color:#1F4E79;border:2px solid #1F4E79;border-radius:7px;font-size:14px;font-weight:600;cursor:pointer;font-family:sans-serif}
+.btn-accent{width:100%;padding:13px;background:#C9A84C;color:#163A5A;border:none;border-radius:7px;font-size:14px;font-weight:700;cursor:pointer;font-family:sans-serif}
+.btn-row{display:flex;gap:10px}
+.drop-zone{border:2px dashed #A8C8E8;border-radius:10px;padding:22px 14px;text-align:center;background:#EBF4FB;cursor:pointer;margin-bottom:12px}
+.drop-zone:hover{border-color:#1F4E79;background:#D6E4F0}
+.file-item{display:flex;align-items:center;gap:9px;padding:9px 11px;border:1.5px solid #E8EEF5;border-radius:7px;background:#fff;margin-bottom:7px}
+.file-icon{width:32px;height:32px;border-radius:7px;display:flex;align-items:center;justify-content:center;font-size:15px;flex-shrink:0}
+.file-name{font-size:13px;font-weight:500;color:#1A2E42;font-family:sans-serif;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.file-role{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin-top:2px;font-family:sans-serif}
+.file-stat{font-size:11px;padding:2px 8px;border-radius:20px;font-weight:600;flex-shrink:0;font-family:sans-serif}
+.proc-bar{background:#D6E4F0;border-radius:7px;padding:13px 15px;margin-bottom:12px;display:flex;align-items:center;gap:11px}
+@keyframes spin{to{transform:rotate(360deg)}}
+.spinner{width:18px;height:18px;border:2.5px solid #A8C8E8;border-top-color:#1F4E79;border-radius:50%;animation:spin .8s linear infinite;flex-shrink:0}
+.summ-card{background:#1F4E79;border-radius:10px;padding:13px 15px;margin-bottom:14px;color:#fff}
+.s-label{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:#A8C8E8;margin-bottom:2px;font-family:sans-serif}
+.s-val{font-size:15px;font-weight:700}
+.s-grid{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-top:10px}
+.s-item{background:rgba(255,255,255,.09);border-radius:7px;padding:9px}
+.exp-row{border:1.5px solid #E8EEF5;border-radius:9px;margin-bottom:9px;overflow:hidden;background:#fff;box-shadow:0 1px 4px rgba(0,0,0,.04)}
+.exp-row.dup{border-color:#C62828;background:#FFEBEE}
+.exp-row-head{display:flex;align-items:center;gap:7px;padding:9px 11px;background:#F7F9FC;border-bottom:1px solid #E8EEF5;cursor:pointer;user-select:none}
+.exp-row.dup .exp-row-head{background:#FFEBEE}
+.row-num{width:22px;height:22px;background:#1F4E79;color:#fff;border-radius:50%;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-family:sans-serif}
+.exp-row.dup .row-num{background:#C62828}
+.row-summary{flex:1;font-size:13px;font-weight:500;color:#1A2E42;font-family:sans-serif;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.row-amt{font-size:15px;font-weight:700;color:#1F4E79;flex-shrink:0}
+.exp-row-body{padding:12px;display:flex;flex-direction:column;gap:9px}
+.totals-bar{background:#D6E4F0;border-radius:9px;padding:13px 15px;margin-bottom:14px}
+.t-row{display:flex;justify-content:space-between;align-items:center;padding:4px 0;font-size:13px;color:#4A6880;border-bottom:1px solid #A8C8E8;font-family:sans-serif}
+.t-row:last-child{border-bottom:none}
+.t-total{font-size:15px;font-weight:700;color:#1F4E79;padding-top:8px;font-family:Georgia,serif}
+.alert-info{padding:9px 13px;border-radius:6px;font-size:13px;margin-bottom:11px;display:flex;gap:8px;background:#D6E4F0;color:#1F4E79;border-left:3px solid #2D6A9F;font-family:sans-serif}
+.alert-warn{padding:9px 13px;border-radius:6px;font-size:13px;margin-bottom:11px;display:flex;gap:8px;background:#FFF3E0;color:#E65100;border-left:3px solid #E65100;font-family:sans-serif}
+.toast{position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:#1F4E79;color:#fff;padding:10px 20px;border-radius:25px;font-size:13px;font-weight:500;box-shadow:0 4px 20px rgba(31,78,121,.3);z-index:9999;white-space:nowrap;font-family:sans-serif;opacity:0;transition:opacity .3s}
+.toast.show{opacity:1}
+.add-row-btn{display:flex;align-items:center;justify-content:center;gap:6px;width:100%;padding:10px;border:2px dashed #A8C8E8;border-radius:7px;background:none;cursor:pointer;font-size:13px;font-weight:600;color:#2D6A9F;font-family:sans-serif;margin-bottom:12px}
+.add-row-btn:hover{border-color:#1F4E79;color:#1F4E79;background:#EBF4FB}
+select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='7'%3E%3Cpath fill='%231F4E79' d='M5 7L0 0h10z'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 12px center;padding-right:32px}
+.dup-tag{font-size:10px;font-weight:700;color:#C62828;padding:2px 7px;border-radius:12px;background:#FFEBEE;border:1px solid #C62828;font-family:sans-serif;flex-shrink:0}
+.btn-del{padding:5px 12px;font-size:12px;background:#FFEBEE;color:#C62828;border:1px solid #C62828;border-radius:5px;cursor:pointer;font-family:sans-serif;font-weight:600}
+.btn-keep{padding:5px 12px;font-size:12px;background:#E8F5E9;color:#2E7D32;border:1px solid #2E7D32;border-radius:5px;cursor:pointer;font-family:sans-serif;font-weight:600}
+</style>
+</head>
+<body>
+<div id="app">
+  <div class="hdr">
+    <div class="hdr-row">
+      <div class="logo">S</div>
+      <div>
+        <div class="hdr-title">SERN Expense Tool</div>
+        <div class="hdr-sub">Mission &amp; Travel Reimbursement</div>
+      </div>
+    </div>
+  </div>
+  <div class="steps" id="steps-bar"></div>
+  <div class="content" id="content"></div>
+  <div class="footer" id="footer"></div>
+  <div class="toast" id="toast"></div>
+</div>
+<input type="file" id="file-input" multiple accept=".pdf,.jpg,.jpeg,.png,.heic,.webp" style="display:none">
+
+<script>
+const EMP=[
+  {id:"nicola",  name:"Nicola",   base:"Reggio Emilia",    card:"credit_card",    km:true,  tpl:"KM"},
+  {id:"ginevra", name:"Ginevra",  base:"Scandiano RE",     card:"ginevra_soldo",  km:true,  tpl:"KM"},
+  {id:"laura",   name:"Laura",    base:"Casalmaggiore MN", card:"laura_soldo",    km:true,  tpl:"KM"},
+  {id:"federica",name:"Federica", base:"Sorbolo PR",       card:"federica_soldo", km:true,  tpl:"KM"},
+  {id:"alessia", name:"Alessia",  base:"—",                card:"alessia_soldo",  km:false, tpl:"Standard"},
+  {id:"nanna",   name:"Nanna",    base:"—",                card:"nanna_soldo",    km:false, tpl:"Standard"},
+  {id:"sofia",   name:"Sofia",    base:"—",                card:"sofia_soldo",    km:false, tpl:"Standard"},
+];
+const PROJECTS=["ACCREDITATION 24-25","ACCREDITATION 25-26","BRIDGE 26","FOOD4FUTURE 26","INTEC 26","RETHINK 26","STEAM 26","STRADE FUTURE 26","TRANSMICVET 26"];
+const CATS=["Meals","Flight","Accommodation","Train-bus-taxi","Car rental","Fuel","Telepass","Fees","Other"];
+const CICONS={Meals:"🍽️",Flight:"✈️",Accommodation:"🏨","Train-bus-taxi":"🚆","Car rental":"🚗",Fuel:"⛽",Telepass:"🛣️",Fees:"📋",Other:"📎"};
+let ST={step:1,emp:null,mission:"",auth:"",expType:"Spese di funzionamento",project:"",kmApproved:false,files:[],rows:[],proc:false,procMsg:"",expanded:{}};
+let rid=1,fid=1;
+const ni=()=>rid++;
+
+function toast(msg,d=2800){const t=document.getElementById("toast");t.textContent=msg;t.classList.add("show");setTimeout(()=>t.classList.remove("show"),d)}
+
+function detectRole(name,card){
+  const f=name.toLowerCase();
+  if(f.includes("telepass"))return"telepass";
+  if(f.includes(card.toLowerCase()))return"card";
+  for(const e of EMP)if(f.includes(e.card.toLowerCase()))return"card";
+  return"receipt";
+}
+
+function catFromText(t){
+  const s=(t||"").toLowerCase();
+  if(/food|cibo|pasto|ristoran|trattoria|pizz|bar|caf|lunch|dinner|breakfast|colaz|pranzo|cena|snack|meal/.test(s))return"Meals";
+  if(/flight|aereo|ryanair|vueling|alitalia|easyjet|lufthansa|airport/.test(s))return"Flight";
+  if(/hotel|hostel|b.b|bed|accommodation|albergo|ostello|booking|airbnb/.test(s))return"Accommodation";
+  if(/train|treno|trenitalia|italo|bus|autobus|taxi|uber|tram|metro|flixbus/.test(s))return"Train-bus-taxi";
+  if(/autonoleggio|rent.a.car|rental|hertz|avis|europcar/.test(s))return"Car rental";
+  if(/benzina|gasolio|fuel|eni|agip|q8|tamoil|shell|total/.test(s))return"Fuel";
+  if(/telepass|autostrada|pedagg|toll/.test(s))return"Telepass";
+  if(/fee|iscrizione|quota|conference|registration|tassa/.test(s))return"Fees";
+  return"Other";
+}
+
+function fileToB64(file){return new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(r.result.split(",")[1]);r.onerror=()=>rej();r.readAsDataURL(file)})}
+
+function dupCheck(rows){
+  const seen=new Set();
+  return rows.map(r=>{const k=`${r.date}|${(parseFloat(r.amt)||0).toFixed(2)}`;const d=seen.has(k);seen.add(k);return{...r,isDup:d}});
+}
+
+async function parseReceipt(file){
+  const isImg=file.type.startsWith("image/"),isPdf=file.type==="application/pdf";
+  if(!isImg&&!isPdf)return null;
+  const b64=await fileToB64(file);
+  const part=isImg?{type:"image",source:{type:"base64",media_type:file.type,data:b64}}:{type:"document",source:{type:"base64",media_type:"application/pdf",data:b64}};
+  const res=await fetch("https://api.anthropic.com/v1/messages",{
+    method:"POST",headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:800,
+      messages:[{role:"user",content:[part,{type:"text",
+        text:'Extract: date (YYYY-MM-DD), total amount, currency (ISO 3-letter), merchant description max 5 words, category from Meals|Flight|Accommodation|Train-bus-taxi|Car rental|Fuel|Telepass|Fees|Other. Food/restaurant=Meals. Reply ONLY valid JSON no markdown: {"date":"","amount":0,"currency":"EUR","description":"","category":""}'}]}]})});
+  const data=await res.json();
+  const text=(data.content||[]).filter(b=>b.type==="text").map(b=>b.text).join("");
+  return JSON.parse(text.replace(/```json|```/g,"").trim());
+}
+
+function render(){
+  // Steps
+  const bar=document.getElementById("steps-bar");
+  bar.innerHTML=["Setup","Upload","Review"].map((l,i)=>{
+    const n=i+1,cls=n<ST.step?"done":n===ST.step?"active":"";
+    return`<div class="step-item ${cls}"><div class="step-circle">${n<ST.step?"✓":n}</div><div class="step-label">${l}</div></div>`;
+  }).join("");
+  if(ST.step===1)r1();else if(ST.step===2)r2();else r3();
+}
+
+function r1(){
+  const c=document.getElementById("content");
+  const projHtml=ST.expType==="Progetti 26"
+    ?'<div class="field"><label class="lbl">Project <span class="req">*</span></label>'
+      +'<select id="fp"><option value="">— Select project —</option>'
+      +PROJECTS.map(p=>'<option value="'+p+'"'+(ST.project===p?' selected':'')+'>'+p+'</option>').join('')
+      +'</select></div>'
+    :'';
+  const kmColor=ST.kmApproved?"#1F4E79":"#D1D5DB";
+  const kmBg=ST.kmApproved?"#D6E4F0":"#F7F9FC";
+  const kmBorder=ST.kmApproved?"#1F4E79":"#E8EEF5";
+  const kmLeft=ST.kmApproved?"18px":"2px";
+  const kmTextColor=ST.kmApproved?"#1F4E79":"#4A6880";
+  const kmLabel=ST.kmApproved?"Approvato — rimborso km attivo":"Non approvato per questa missione";
+  const kmHtml=(ST.emp&&ST.emp.km)
+    ?'<div class="field" style="margin-top:6px">'
+      +'<label class="lbl">Uso auto personale</label>'
+      +'<div style="display:flex;align-items:center;gap:12px;padding:11px 13px;border:1.5px solid '+kmBorder+';border-radius:7px;background:'+kmBg+';cursor:pointer" id="km-toggle">'
+        +'<div style="width:38px;height:22px;border-radius:11px;background:'+kmColor+';position:relative;flex-shrink:0;transition:background .2s">'
+          +'<div style="width:18px;height:18px;border-radius:50%;background:#fff;position:absolute;top:2px;left:'+kmLeft+';transition:left .2s;box-shadow:0 1px 3px rgba(0,0,0,.2)"></div>'
+        +'</div>'
+        +'<div>'
+          +'<div style="font-size:13px;font-weight:600;color:'+kmTextColor+';font-family:sans-serif">'+kmLabel+'</div>'
+          +'<div style="font-size:11px;color:#9AAFC5;font-family:sans-serif;margin-top:1px">Attiva se l\'uso dell\'auto è stato autorizzato</div>'
+        +'</div>'
+      +'</div>'
+    +'</div>'
+    :'';
+  c.innerHTML=
+    '<div class="sec-title">Mission Setup</div>'
+    +'<div class="sec-sub">Select the employee and configure the mission.</div>'
+    +'<div class="field"><label class="lbl">Employee <span class="req">*</span></label>'
+      +'<div class="emp-grid" id="eg"></div></div>'
+    +'<div class="field"><label class="lbl">Mission Name <span class="req">*</span></label>'
+      +'<input type="text" id="fm" placeholder="e.g. Partner Meeting – Stockholm May 2026" value="'+ST.mission+'"></div>'
+    +'<div class="field"><label class="lbl">Authorization Reference <span class="req">*</span></label>'
+      +'<input type="text" id="fa" placeholder="e.g. AUTH-2026-045 (from approval email)" value="'+ST.auth+'"></div>'
+    +'<div class="field"><label class="lbl">Expense Type <span class="req">*</span></label>'
+      +'<div class="type-row">'
+        +'<button class="type-btn'+(ST.expType==="Spese di funzionamento"?" sel":"")+'" data-t="Spese di funzionamento">Spese di funzionamento</button>'
+        +'<button class="type-btn'+(ST.expType==="Progetti 26"?" sel":"")+'" data-t="Progetti 26">Progetti 26</button>'
+      +'</div></div>'
+    +projHtml
+    +kmHtml;
+  const eg=document.getElementById("eg");
+  EMP.forEach(e=>{
+    const d=document.createElement("div");
+    d.className="emp-card"+(ST.emp?.id===e.id?" sel":"");
+    d.innerHTML=`<div class="emp-name">${e.name}</div><div class="emp-base">${e.base}</div><span class="emp-badge">${e.km?"🚗 KM":"📋 Std"}</span>`;
+    d.onclick=()=>{ST.emp=e;ST.kmApproved=(e.id==="nicola");render()};
+    eg.appendChild(d);
+  });
+  document.getElementById("fm").oninput=e=>ST.mission=e.target.value;
+  document.getElementById("fa").oninput=e=>ST.auth=e.target.value;
+  document.querySelectorAll(".type-btn").forEach(b=>b.onclick=()=>{ST.expType=b.dataset.t;if(ST.expType!=="Progetti 26")ST.project="";render()});
+  const ps=document.getElementById("fp");if(ps)ps.onchange=e=>ST.project=e.target.value;
+  const kt=document.getElementById("km-toggle");if(kt)kt.onclick=()=>{ST.kmApproved=!ST.kmApproved;r1()};
+  document.getElementById("footer").innerHTML=`<button class="btn-primary" id="b1n">Continue to Upload →</button>`;
+  document.getElementById("b1n").onclick=()=>{
+    if(!ST.emp)return toast("⚠️ Select an employee");
+    if(!ST.mission.trim())return toast("⚠️ Enter a mission name");
+    if(!ST.auth.trim())return toast("⚠️ Enter authorization reference");
+    if(ST.expType==="Progetti 26"&&!ST.project)return toast("⚠️ Select a project");
+    ST.step=2;render();
+  };
+}
+
+function r2(){
+  const c=document.getElementById("content");
+  const procBar=ST.proc
+    ?'<div class="proc-bar"><div class="spinner"></div><span style="font-size:13px;color:#1F4E79;font-family:sans-serif;font-weight:500">'+ST.procMsg+'</span></div>'
+    :'';
+  c.innerHTML=
+    '<div class="sec-title">Upload Documents</div>'
+    +'<div class="sec-sub">Add receipts, card statement, and Telepass PDF if applicable.</div>'
+    +'<div class="alert-info"><span>ℹ️</span><span>Card filename: <strong>'+ST.emp.card+'_YYYY-MM</strong> — role auto-detected</span></div>'
+    +'<div class="drop-zone" id="dz">'
+      +'<div style="font-size:32px;margin-bottom:8px">📎</div>'
+      +'<div style="font-size:14px;color:#4A6880;font-family:sans-serif"><strong>Tap to add files</strong><br>PDF, JPG, PNG, HEIC accepted</div>'
+    +'</div>'
+    +'<div id="fl"></div>'
+    +procBar;
+  const dz=document.getElementById("dz");
+  dz.onclick=()=>document.getElementById("file-input").click();
+  dz.ondragover=e=>{e.preventDefault();dz.style.borderColor="#1F4E79"};
+  dz.ondragleave=()=>dz.style.borderColor="#A8C8E8";
+  dz.ondrop=e=>{e.preventDefault();addFiles(Array.from(e.dataTransfer.files))};
+  document.getElementById("file-input").onchange=e=>{addFiles(Array.from(e.target.files));e.target.value=""};
+  renderFL();
+  const hasR=ST.files.filter(f=>f.role==="receipt").length>0;
+  document.getElementById("footer").innerHTML=`<div class="btn-row">
+    <button class="btn-secondary" id="b2b">← Back</button>
+    <button class="btn-primary" id="b2p" style="flex:2"${!hasR||ST.proc?" disabled":""}>${ST.proc?"⏳ Processing…":"🔍 Parse &amp; Continue →"}</button>
+  </div>`;
+  document.getElementById("b2b").onclick=()=>{ST.step=1;render()};
+  document.getElementById("b2p").onclick=processFiles;
+}
+
+function addFiles(newFiles){
+  newFiles.forEach(f=>ST.files.push({id:fid++,file:f,role:detectRole(f.name,ST.emp.card),status:"pending"}));
+  render();
+}
+
+function renderFL(){
+  const fl=document.getElementById("fl");if(!fl)return;
+  if(!ST.files.length){fl.innerHTML=`<div style="text-align:center;padding:20px 0;color:#4A6880;font-family:sans-serif;font-size:14px">📂 No files added yet</div>`;return}
+  const ri={receipt:"🧾",card:"💳",telepass:"🛣️",unknown:"📄"};
+  const rc={receipt:"#E8F5E9",card:"#F5EDD4",telepass:"#E3F2FD",unknown:"#E8EEF5"};
+  const rl={receipt:"Receipt",card:"Card Statement",telepass:"Telepass",unknown:"Unknown"};
+  const rlc={receipt:"#2E7D32",card:"#E65100",telepass:"#1565C0",unknown:"#9AAFC5"};
+  const ss={pending:"background:#E8EEF5;color:#5A7A99",processing:"background:#FFF3E0;color:#E65100",done:"background:#E8F5E9;color:#2E7D32",error:"background:#FFEBEE;color:#C62828"};
+  fl.innerHTML=ST.files.map(f=>`
+    <div class="file-item">
+      <div class="file-icon" style="background:${rc[f.role]}">${ri[f.role]}</div>
+      <div style="flex:1;min-width:0">
+        <div class="file-name">${f.file.name}</div>
+        <div class="file-role" style="color:${rlc[f.role]}">${rl[f.role]}</div>
+      </div>
+      <span class="file-stat" style="${ss[f.status]}">${f.status}</span>
+      <span style="color:#C62828;cursor:pointer;font-size:16px;flex-shrink:0;padding-left:4px" data-rm="${f.id}">✕</span>
+    </div>`).join("");
+  fl.querySelectorAll("[data-rm]").forEach(el=>el.onclick=()=>{ST.files=ST.files.filter(x=>x.id!=el.dataset.rm);render()});
+}
+
+async function processFiles(){
+  const receipts=ST.files.filter(f=>f.role==="receipt");
+  if(!receipts.length)return toast("⚠️ No receipts to parse");
+  ST.proc=true;ST.procMsg="Starting…";render();
+  const newRows=[];
+  for(let i=0;i<receipts.length;i++){
+    const rf=receipts[i];
+    ST.procMsg=`Parsing ${i+1}/${receipts.length}: ${rf.file.name}`;
+    rf.status="processing";r2();
+    try{
+      const p=await parseReceipt(rf.file);
+      rf.status="done";
+      newRows.push(p?{id:ni(),date:p.date||"",desc:p.description||rf.file.name.replace(/\.[^.]+$/,""),cat:p.category||catFromText(p.description||""),amt:p.amount||0,origCur:p.currency||"EUR",km:"",isDup:false,src:rf.file.name}
+        :{id:ni(),date:"",desc:rf.file.name.replace(/\.[^.]+$/,""),cat:"Other",amt:0,origCur:"EUR",km:"",isDup:false,src:rf.file.name});
+    }catch{rf.status="error"}
+  }
+  const final=dupCheck(newRows);
+  ST.rows=final;ST.expanded=Object.fromEntries(final.filter(r=>r.isDup).map(r=>[r.id,true]));
+  ST.proc=false;ST.step=3;render();
+}
+
+function updRow(id,field,val){
+  ST.rows=dupCheck(ST.rows.map(r=>r.id==id?{...r,[field]:val}:r).map(r=>({...r,isDup:false})));
+  r3();
+}
+
+function r3(){
+  const c=document.getElementById("content");
+  const emp=ST.emp;
+  const valid=ST.rows.filter(r=>!r.isDup);
+  const total=valid.reduce((s,r)=>s+(parseFloat(r.amt)||0),0);
+  const dups=ST.rows.filter(r=>r.isDup).length;
+  const catT={};valid.forEach(r=>{catT[r.cat]=(catT[r.cat]||0)+(parseFloat(r.amt)||0)});
+
+  const projItem=ST.project
+    ?'<div class="s-item" style="grid-column:1/-1"><div class="s-label">Project</div><div class="s-val" style="font-size:13px">'+ST.project+'</div></div>'
+    :'';
+  const dupAlert=dups>0
+    ?'<div class="alert-warn">⚠️ '+dups+' potential duplicate(s) detected — review below</div>'
+    :'';
+  const emptyMsg=!ST.rows.length
+    ?'<div style="text-align:center;padding:20px 0;color:#4A6880;font-family:sans-serif;font-size:14px">🧾 No rows yet — add manually or go back</div>'
+    :'';
+  const totalsHtml=Object.keys(catT).length
+    ?'<div class="totals-bar">'
+      +Object.entries(catT).map(([k,v])=>'<div class="t-row"><span>'+CICONS[k]+' '+k+'</span><span style="font-weight:600;color:#1F4E79">€ '+v.toFixed(2)+'</span></div>').join('')
+      +'<div class="t-row t-total"><span>TOTAL</span><span>€ '+total.toFixed(2)+'</span></div>'
+      +'</div>'
+    :'';
+  c.innerHTML=
+    '<div class="summ-card">'
+      +'<div class="s-label">Mission</div>'
+      +'<div class="s-val">'+ST.mission+'</div>'
+      +'<div class="s-grid">'
+        +'<div class="s-item"><div class="s-label">Employee</div><div class="s-val" style="font-size:14px">'+emp.name+'</div></div>'
+        +'<div class="s-item"><div class="s-label">Type</div><div class="s-val" style="font-size:12px">'+ST.expType+'</div></div>'
+        +projItem
+        +'<div class="s-item" style="grid-column:1/-1"><div class="s-label">Auth Ref</div><div class="s-val" style="font-size:12px">'+ST.auth+'</div></div>'
+      +'</div>'
+    +'</div>'
+    +dupAlert
+    +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:11px">'
+      +'<span class="sec-title" style="font-size:16px">Expense Rows</span>'
+      +'<span style="background:#1F4E79;color:#fff;font-size:12px;font-weight:600;padding:3px 10px;border-radius:20px;font-family:sans-serif">'+valid.length+' items</span>'
+    +'</div>'
+    +emptyMsg
+    +'<div id="rc"></div>'
+    +'<button class="add-row-btn" id="ar">+ Add manual row</button>'
+    +totalsHtml;
+
+  document.getElementById("ar").onclick=()=>{
+    const r={id:ni(),date:"",desc:"",cat:"Other",amt:0,origCur:"EUR",km:"",isDup:false,src:"manual"};
+    ST.rows.push(r);ST.expanded[r.id]=true;r3();
+  };
+
+  const rc=document.getElementById("rc");
+  ST.rows.forEach((row,idx)=>{
+    const d=document.createElement("div");
+    d.className="exp-row"+(row.isDup?" dup":"");
+    const open=!!ST.expanded[row.id];
+    const catOpts=CATS.map(cat=>'<option value="'+cat+'"'+(row.cat===cat?' selected':'')+'>'+CICONS[cat]+' '+cat+'</option>').join('');
+    const kmField=(emp.km&&ST.kmApproved)
+      ?'<div class="field"><label class="lbl">KM (if applicable)</label>'
+        +'<input type="number" step="1" value="'+(row.km||'')+'" placeholder="e.g. 142" data-id="'+row.id+'" data-f="km"></div>'
+      :'';
+    const dupWarn=row.isDup
+      ?'<div class="alert-warn" style="margin:0">⚠️ Possible duplicate — same date &amp; amount as another row</div>'
+      :'';
+    const keepBtn=row.isDup
+      ?'<button class="btn-keep" data-keep="'+row.id+'">✓ Keep</button>'
+      :'';
+    const dupTag=row.isDup?'<span class="dup-tag">DUP</span>':'';
+    const bodyHtml=open
+      ?'<div class="exp-row-body">'
+        +'<div class="field"><label class="lbl">Date</label>'
+          +'<input type="date" value="'+row.date+'" data-id="'+row.id+'" data-f="date"></div>'
+        +'<div class="field"><label class="lbl">Description</label>'
+          +'<input type="text" value="'+row.desc+'" placeholder="Merchant / service" data-id="'+row.id+'" data-f="desc"></div>'
+        +'<div class="field"><label class="lbl">Category</label>'
+          +'<select data-id="'+row.id+'" data-f="cat">'+catOpts+'</select></div>'
+        +'<div class="field"><label class="lbl">Amount (EUR)</label>'
+          +'<input type="number" step="0.01" value="'+row.amt+'" data-id="'+row.id+'" data-f="amt"></div>'
+        +kmField
+        +dupWarn
+        +'<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:2px">'
+          +keepBtn
+          +'<button class="btn-del" data-del="'+row.id+'">🗑 Delete</button>'
+        +'</div>'
+      +'</div>'
+      :'';
+    d.innerHTML=
+      '<div class="exp-row-head">'
+        +'<div class="row-num">'+(idx+1)+'</div>'
+        +'<div class="row-summary">'+(row.date||'?')+' · '+(row.desc||'No description')+'</div>'
+        +dupTag
+        +'<div class="row-amt">€'+(parseFloat(row.amt)||0).toFixed(2)+'</div>'
+        +'<span style="color:#9AAFC5;font-size:11px;flex-shrink:0;font-family:sans-serif">'+(open?'▲':'▼')+'</span>'
+      +'</div>'
+      +bodyHtml;
+    d.querySelector(".exp-row-head").onclick=()=>{ST.expanded[row.id]=!ST.expanded[row.id];r3()};
+    d.querySelectorAll("[data-id]").forEach(el=>{
+      el.onclick=e=>e.stopPropagation();
+      el.onchange=el.oninput=()=>updRow(el.dataset.id,el.dataset.f,el.type==="number"?parseFloat(el.value)||0:el.value);
+    });
+    const db=d.querySelector("[data-del]");
+    if(db)db.onclick=e=>{e.stopPropagation();ST.rows=dupCheck(ST.rows.filter(r=>r.id!=db.dataset.del).map(r=>({...r,isDup:false})));r3()};
+    const kb=d.querySelector("[data-keep]");
+    if(kb)kb.onclick=e=>{e.stopPropagation();ST.rows=ST.rows.map(r=>r.id==kb.dataset.keep?{...r,isDup:false}:r);r3()};
+    rc.appendChild(d);
+  });
+
+  document.getElementById("footer").innerHTML=`<div class="btn-row">
+    <button class="btn-secondary" id="b3b">← Back</button>
+    <button class="btn-accent" id="b3g" style="flex:2">📋 Generate Excel Form</button>
+  </div>`;
+  document.getElementById("b3b").onclick=()=>{ST.step=2;render()};
+  document.getElementById("b3g").onclick=generate;
+}
+
+function generate(){
+  const emp=ST.emp;
+  const valid=ST.rows.filter(r=>!r.isDup);
+  const total=valid.reduce((s,r)=>s+(parseFloat(r.amt)||0),0);
+  const catT=valid.reduce((a,r)=>{a[r.cat]=(a[r.cat]||0)+(parseFloat(r.amt)||0);return a},{});
+  const rowsText=valid.map((r,i)=>`| ${i+1} | ${r.date} | ${r.desc} | ${r.cat} | €${(parseFloat(r.amt)||0).toFixed(2)} |${emp.km&&ST.kmApproved&&r.km?` ${r.km} km |`:""}`).join("\n");
+  const prompt=`Please fill the SERN travel expense Excel form with this mission data.
+
+**MISSION**
+- Employee: ${emp.name} (Template: ${emp.tpl}${emp.km&&ST.kmApproved?" with KM":""}, Base: ${emp.base||"—"}, Card: ${emp.card})
+- Mission name: ${ST.mission}
+- Auth reference: ${ST.auth}
+- Type: ${ST.expType}${ST.project?"\n- Project: "+ST.project:""}
+
+**EXPENSE ROWS (${valid.length} items)**
+| # | Date | Description | Category | EUR |${emp.km&&ST.kmApproved?" KM |":""}
+|---|------|-------------|----------|-----|${emp.km&&ST.kmApproved?"-----|":""}
+${rowsText}
+
+**BY CATEGORY**
+${Object.entries(catT).map(([k,v])=>`- ${CICONS[k]} ${k}: €${v.toFixed(2)}`).join("\n")}
+
+**GRAND TOTAL: €${total.toFixed(2)}**
+
+Fill the SERN standard reimbursement Excel using the ${emp.tpl} template${emp.km&&ST.kmApproved?", including KM calculation section":""}. List any fields needing manual completion.`;
+
+  try{window.sendPrompt(prompt);toast("✅ Sent to Claude!")}
+  catch{navigator.clipboard?.writeText(prompt).then(()=>toast("📋 Prompt copied to clipboard!")).catch(()=>toast("⚠️ Ready — copy prompt manually"))}
+}
+
+render();
+</script>
+</body>
+</html>
