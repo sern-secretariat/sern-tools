@@ -128,6 +128,7 @@ let ST={
   missionName:"",
   dateFrom:"",dateTo:"",
   destination:"",
+  destCountry:"",
   scope:"",
   expType:"Spese di funzionamento",
   project:"",
@@ -248,7 +249,29 @@ function r0(){
         +'<input type="date" id="f-dt" value="'+ST.dateTo+'" style="width:100%;padding:10px 12px;border:1.5px solid #E8EEF5;border-radius:6px;font-family:sans-serif;font-size:14px;color:#1A2E42;background:#fff;outline:none;box-sizing:border-box"></div>'
     +'</div>'
     +'<div class="field"><label class="lbl">Destination <span class="req">*</span></label>'
-      +'<input type="text" id="f-dest" placeholder="e.g. Brussels, Belgium" value="'+ST.destination+'" style="width:100%;padding:10px 12px;border:1.5px solid #E8EEF5;border-radius:6px;font-family:sans-serif;font-size:14px;color:#1A2E42;background:#fff;outline:none;box-sizing:border-box"></div>'
+      +'<input type="text" id="f-dest" placeholder="e.g. Brussels" value="'+ST.destination+'" style="width:100%;padding:10px 12px;border:1.5px solid #E8EEF5;border-radius:6px;font-family:sans-serif;font-size:14px;color:#1A2E42;background:#fff;outline:none;box-sizing:border-box"></div>'
+    +'<div class="field"><label class="lbl">Country <span class="req">*</span></label>'
+      +'<div style="position:relative"><select id="f-country" style="width:100%;padding:10px 12px;border:1.5px solid #E8EEF5;border-radius:6px;font-family:sans-serif;font-size:14px;color:#1A2E42;background:#fff;appearance:none;outline:none;box-sizing:border-box;background-image:url(\'data:image/svg+xml,%3Csvg xmlns=\\\'http://www.w3.org/2000/svg\\\' width=\\\'10\\\' height=\\\'7\\\'%3E%3Cpath fill=\\\'%231F4E79\\\' d=\\\'M5 7L0 0h10z\\\'/%3E%3C/svg%3E\');background-repeat:no-repeat;background-position:right 12px center;padding-right:32px">'
+        +'<option value="">— Select country —</option>'
+        +'<option value="Italy"'+(ST.destCountry==="Italy"?" selected":"")+'>🇮🇹 Italy</option>'
+        +'<option value="Sweden"'+(ST.destCountry==="Sweden"?" selected":"")+'>🇸🇪 Sweden</option>'
+        +'<option value="Belgium"'+(ST.destCountry==="Belgium"?" selected":"")+'>🇧🇪 Belgium</option>'
+        +'<option value="France"'+(ST.destCountry==="France"?" selected":"")+'>🇫🇷 France</option>'
+        +'<option value="Germany"'+(ST.destCountry==="Germany"?" selected":"")+'>🇩🇪 Germany</option>'
+        +'<option value="Spain"'+(ST.destCountry==="Spain"?" selected":"")+'>🇪🇸 Spain</option>'
+        +'<option value="Netherlands"'+(ST.destCountry==="Netherlands"?" selected":"")+'>🇳🇱 Netherlands</option>'
+        +'<option value="Other EU"'+(ST.destCountry==="Other EU"?" selected":"")+'>🇪🇺 Other EU country</option>'
+        +'<option value="Other"'+(ST.destCountry==="Other"?" selected":"")+'>🌍 Other</option>'
+      +'</select></div>'
+      +(ST.destCountry==="Italy"
+        ?'<div style="margin-top:6px;font-size:12px;color:#4A6880;font-family:sans-serif;background:#D6E4F0;padding:7px 10px;border-radius:5px">ℹ️ Mission allowance (€77.47/day) does not apply to missions in Italy</div>'
+        :(ST.emp&&ST.emp.id==="nanna"&&ST.destCountry==="Sweden"
+          ?'<div style="margin-top:6px;font-size:12px;color:#4A6880;font-family:sans-serif;background:#D6E4F0;padding:7px 10px;border-radius:5px">ℹ️ Mission allowance does not apply for Nanna on Sweden missions</div>'
+          :(ST.destCountry&&ST.destCountry!=="Italy"
+            ?'<div style="margin-top:6px;font-size:12px;color:#2E7D32;font-family:sans-serif;background:#E8F5E9;padding:7px 10px;border-radius:5px">✓ Mission allowance (€77.47/day) applies for multi-day missions</div>'
+            :''))
+      )
+    +'</div>'
     +'<div class="field"><label class="lbl">Purpose <span class="req">*</span></label>'
       +'<input type="text" id="f-scope" placeholder="e.g. Partner meeting, GA 2026" value="'+ST.scope+'" style="width:100%;padding:10px 12px;border:1.5px solid #E8EEF5;border-radius:6px;font-family:sans-serif;font-size:14px;color:#1A2E42;background:#fff;outline:none;box-sizing:border-box"></div>'
     +'<div class="field"><label class="lbl">Expense type <span class="req">*</span></label>'
@@ -288,6 +311,7 @@ function r0(){
   document.getElementById("f-df").onchange=e=>ST.dateFrom=e.target.value;
   document.getElementById("f-dt").onchange=e=>ST.dateTo=e.target.value;
   document.getElementById("f-dest").oninput=e=>ST.destination=e.target.value;
+  document.getElementById("f-country").onchange=e=>{ST.destCountry=e.target.value;r0()};
   document.getElementById("f-scope").oninput=e=>ST.scope=e.target.value;
   document.getElementById("f-cost").onblur=e=>{ST.estimatedCost=e.target.value;r0()};
   document.getElementById("f-cost").oninput=e=>{ST.estimatedCost=e.target.value;};
@@ -310,6 +334,7 @@ async function submitRequest(){
   if(!ST.dateFrom)return toast("⚠️ Enter start date");
   if(!ST.dateTo)return toast("⚠️ Enter end date");
   if(!ST.destination.trim())return toast("⚠️ Enter destination");
+  if(!ST.destCountry)return toast("⚠️ Select destination country");
   if(!ST.scope.trim())return toast("⚠️ Enter purpose");
   if(ST.expType==="Progetti 26"&&!ST.project)return toast("⚠️ Select a project");
   if(ST.carUse&&!ST.carReason)return toast("⚠️ Select a reason for car use");
@@ -324,6 +349,7 @@ async function submitRequest(){
     dateFrom:ST.dateFrom,
     dateTo:ST.dateTo,
     destination:ST.destination,
+    destCountry:ST.destCountry,
     scope:ST.scope,
     expenseType:ST.expType,
     project:ST.project||"",
@@ -559,6 +585,9 @@ function r3(){
       ?'<div class="field"><label class="lbl">KM (if applicable)</label>'
         +'<input type="number" step="1" value="'+(row.km||'')+'" placeholder="e.g. 142" data-id="'+row.id+'" data-f="km"></div>'
       :'';
+    const over300Warn=(parseFloat(row.amt)||0)>=300
+      ?'<div style="padding:8px 12px;border-radius:6px;font-size:12px;background:#FFF3E0;color:#E65100;border-left:3px solid #E65100;font-family:sans-serif">⚠️ Single expense ≥ €300 — attach at least 2 written quotes</div>'
+      :'';
     const dupWarn=row.isDup
       ?'<div class="alert-warn" style="margin:0">⚠️ Possible duplicate — same date &amp; amount as another row</div>'
       :'';
@@ -577,6 +606,7 @@ function r3(){
         +'<div class="field"><label class="lbl">Amount (EUR)</label>'
           +'<input type="number" step="0.01" value="'+row.amt+'" data-id="'+row.id+'" data-f="amt"></div>'
         +kmField
+        +over300Warn
         +dupWarn
         +'<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:2px">'
           +keepBtn
