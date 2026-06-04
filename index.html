@@ -1,4 +1,31 @@
-
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>SERN Mission Expense Tool</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Georgia',serif;background:#EBF4FB;min-height:100vh;display:flex;justify-content:center}
+#app{max-width:500px;width:100%;min-height:100vh;display:flex;flex-direction:column;background:#fff;box-shadow:0 4px 32px rgba(31,78,121,.18)}
+.hdr{background:#1F4E79;padding:15px 18px 11px;position:sticky;top:0;z-index:10}
+.hdr-row{display:flex;align-items:center;gap:10px}
+.logo{width:36px;height:36px;background:#C9A84C;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:700;color:#1F4E79;flex-shrink:0}
+.hdr-title{font-size:17px;font-weight:700;color:#fff}
+.hdr-sub{font-size:10px;color:#A8C8E8;text-transform:uppercase;letter-spacing:.06em;margin-top:2px;font-family:sans-serif}
+.steps{display:flex;background:#1F4E79;padding:10px 18px 14px}
+.step-item{flex:1;display:flex;flex-direction:column;align-items:center;position:relative}
+.step-item:not(:last-child)::after{content:'';position:absolute;top:13px;left:50%;width:100%;height:2px;background:rgba(255,255,255,.2);z-index:0}
+.step-item.done:not(:last-child)::after{background:#C9A84C}
+.step-circle{width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;position:relative;z-index:1;border:2px solid rgba(255,255,255,.22);color:rgba(255,255,255,.4);background:rgba(255,255,255,.1);font-family:sans-serif}
+.step-item.active .step-circle{background:#C9A84C;border-color:#C9A84C;color:#1F4E79;box-shadow:0 0 0 3px rgba(201,168,76,.3)}
+.step-item.done .step-circle{background:#C9A84C;border-color:#C9A84C;color:#1F4E79}
+.step-label{font-size:9px;color:rgba(255,255,255,.35);margin-top:5px;text-transform:uppercase;letter-spacing:.06em;font-family:sans-serif}
+.step-item.active .step-label{color:#C9A84C}
+.step-item.done .step-label{color:rgba(255,255,255,.65)}
+.content{flex:1;padding:18px;overflow-y:auto}
+.footer{padding:14px 18px;border-top:1px solid #E8EEF5;background:#fff;position:sticky;bottom:0}
+.sec-title{font-size:18px;font-weight:700;color:#1F4E79;margin-bottom:4px}
 .sec-sub{font-size:13px;color:#4A6880;margin-bottom:16px;line-height:1.5;font-family:sans-serif}
 .field{margin-bottom:14px}
 .lbl{display:block;font-size:10px;font-weight:700;color:#2D6A9F;text-transform:uppercase;letter-spacing:.07em;margin-bottom:5px;font-family:sans-serif}
@@ -203,7 +230,22 @@ function r0(){
         +'<div class="s-val" style="font-size:16px;margin:6px 0">'+ST.missionName+'</div>'
         +'<div style="font-size:13px;color:#A8C8E8;margin-top:8px;font-family:sans-serif">Nicola will review your request in Teams.<br>You will receive an email when approved.</div>'
       +'</div>'
-      +'<div class="alert-info"><span>ℹ️</span><span style="font-family:sans-serif">Once approved, reopen this tool and enter your authorization reference to submit expenses.</span></div>';
+      +'<div style="background:#fff;border:1.5px solid #E8EEF5;border-radius:10px;padding:16px;margin-bottom:12px">'
+        +'<div style="font-size:13px;font-weight:700;color:#1F4E79;font-family:sans-serif;margin-bottom:10px">Already have your authorization reference?</div>'
+        +'<input type="text" id="f-ref" placeholder="e.g. MISS-2026-05-AVANZI-BRUSSELS" style="width:100%;padding:10px 12px;border:1.5px solid #E8EEF5;border-radius:6px;font-family:sans-serif;font-size:13px;color:#1A2E42;background:#fff;outline:none;box-sizing:border-box;margin-bottom:10px">'
+        +'<button id="btn-unlock" style="width:100%;padding:11px;background:#C9A84C;color:#163A5A;border:none;border-radius:7px;font-size:14px;font-weight:700;cursor:pointer;font-family:sans-serif">Unlock Expense Steps →</button>'
+      +'</div>'
+      +'<div class="alert-info"><span>ℹ️</span><span style="font-family:sans-serif;font-size:13px">Or wait for the approval email, then return here and enter your reference code.</span></div>';
+
+    document.getElementById("btn-unlock").onclick=()=>{
+      const ref=document.getElementById("f-ref").value.trim();
+      if(!ref)return toast("⚠️ Enter your authorization reference");
+      if(!ref.startsWith("MISS-"))return toast("⚠️ Invalid reference — should start with MISS-");
+      ST.auth=ref;
+      ST.step=1;
+      render();
+    };
+
     document.getElementById("footer").innerHTML='';
     return;
   }
@@ -380,7 +422,8 @@ function r1(){
     '<div class="sec-title">Mission Setup</div>'
     +'<div class="sec-sub">Select the employee and configure the mission.</div>'
     +'<div class="field"><label class="lbl">Employee <span class="req">*</span></label>'
-      +'<div class="emp-grid" id="eg"></div></div>'    +'<div class="field"><label class="lbl">Mission Name <span class="req">*</span></label>'
+      +'<div class="emp-grid" id="eg"></div></div>'
+    +'<div class="field"><label class="lbl">Mission Name <span class="req">*</span></label>'
       +'<input type="text" id="fm" placeholder="e.g. Partner Meeting – Stockholm May 2026" value="'+ST.missionName+'"></div>'
     +'<div class="field"><label class="lbl">Authorization Reference <span class="req">*</span></label>'
       +'<input type="text" id="fa" placeholder="e.g. AUTH-2026-045 (from approval email)" value="'+ST.auth+'"></div>'
