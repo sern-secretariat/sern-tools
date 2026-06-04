@@ -431,6 +431,18 @@ async function submitRequest(){
 
 function r1(){
   const c=document.getElementById("content");
+
+  // Soft auto-detect employee from auth code MISS-YYYY-MM-COGNOME-DESTINATION
+  // Only pre-selects if exact match found — always remains editable
+  if(ST.auth && !ST.emp){
+    const parts=ST.auth.toUpperCase().split("-");
+    if(parts.length>=4){
+      const cognome=parts[3];
+      const found=EMP.find(e=>e.name.toUpperCase()===cognome||e.id.toUpperCase()===cognome);
+      if(found){ST.emp=found;ST.kmApproved=(found.id==="nicola");}
+    }
+  }
+
   const projHtml=ST.expType==="Progetti 26"
     ?'<div class="field"><label class="lbl">Project <span class="req">*</span></label>'
       +'<select id="fp"><option value="">— Select project —</option>'
@@ -461,11 +473,15 @@ function r1(){
     '<div class="sec-title">Mission Setup</div>'
     +'<div class="sec-sub">Select the employee and configure the mission.</div>'
     +'<div class="field"><label class="lbl">Employee <span class="req">*</span></label>'
-      +'<div class="emp-grid" id="eg"></div></div>'
+      +'<div class="emp-grid" id="eg"></div>'
+      +(ST.emp?'<div style="font-size:11px;color:#2E7D32;font-family:sans-serif;margin-top:-6px;margin-bottom:8px">✓ Auto-detected from reference code — change if incorrect</div>':'')
+    +'</div>'
     +'<div class="field"><label class="lbl">Mission Name <span class="req">*</span></label>'
-      +'<input type="text" id="fm" placeholder="e.g. Partner Meeting – Stockholm May 2026" value="'+ST.missionName+'"></div>'
+      +'<input type="text" id="fm" placeholder="e.g. Partner Meeting – Stockholm May 2026" value="'+ST.missionName+'">'
+      +(ST.auth&&!ST.missionName?'<div style="font-size:11px;color:#4A6880;font-family:sans-serif;margin-top:4px">ℹ️ Find the mission name in your approval email</div>':'')
+    +'</div>'
     +'<div class="field"><label class="lbl">Authorization Reference <span class="req">*</span></label>'
-      +'<input type="text" id="fa" placeholder="e.g. AUTH-2026-045 (from approval email)" value="'+ST.auth+'"></div>'
+      +'<input type="text" id="fa" placeholder="e.g. MISS-2026-05-AVANZI-BRUSSELS" value="'+ST.auth+'"'+(ST.auth?' readonly style="background:#F7F9FC;color:#4A6880;border-color:#D6E4F0"':'')+'></div>'
     +'<div class="field"><label class="lbl">Expense Type <span class="req">*</span></label>'
       +'<div class="type-row">'
         +'<button class="type-btn'+(ST.expType==="Spese di funzionamento"?" sel":"")+'" data-t="Spese di funzionamento">Institutional activities</button>'
