@@ -253,13 +253,13 @@ function r0(){
       +'<input type="text" id="f-scope" placeholder="e.g. Partner meeting, GA 2026" value="'+ST.scope+'" style="width:100%;padding:10px 12px;border:1.5px solid #E8EEF5;border-radius:6px;font-family:sans-serif;font-size:14px;color:#1A2E42;background:#fff;outline:none;box-sizing:border-box"></div>'
     +'<div class="field"><label class="lbl">Expense type <span class="req">*</span></label>'
       +'<div class="type-row">'
-        +'<button class="type-btn'+(ST.expType==="Spese di funzionamento"?" sel":"")+'" data-t="Spese di funzionamento">Spese di funzionamento</button>'
-        +'<button class="type-btn'+(ST.expType==="Progetti 26"?" sel":"")+'" data-t="Progetti 26">Progetti 26</button>'
+        +'<button class="type-btn'+(ST.expType==="Spese di funzionamento"?" sel":"")+'" data-t="Spese di funzionamento">Institutional activities</button>'
+        +'<button class="type-btn'+(ST.expType==="Progetti 26"?" sel":"")+'" data-t="Progetti 26">Projects 2026</button>'
       +'</div></div>'
     +projHtml
     +'<div class="field"><label class="lbl">Estimated cost (€)</label>'
       +'<input type="number" id="f-cost" placeholder="e.g. 450" value="'+ST.estimatedCost+'" style="width:100%;padding:10px 12px;border:1.5px solid #E8EEF5;border-radius:6px;font-family:sans-serif;font-size:14px;color:#1A2E42;background:#fff;outline:none;box-sizing:border-box">'
-      +(parseFloat(ST.estimatedCost)>=300?'<div style="margin-top:6px;font-size:12px;color:#E65100;font-family:sans-serif">⚠️ Cost ≥ €300 — remember to collect at least 2 quotes per item</div>':'')
+      +(parseFloat(ST.estimatedCost)>=300?'<div style="margin-top:6px;font-size:12px;color:#E65100;font-family:sans-serif">ℹ️ Reminder: any single expense item ≥ €300 will require at least 2 written quotes</div>':'')
     +'</div>'
     +'<div class="field" style="margin-top:6px"><label class="lbl">Car use</label>'
       +'<div style="display:flex;align-items:center;gap:12px;padding:11px 13px;border:1.5px solid '+(ST.carUse?'#1F4E79':'#E8EEF5')+';border-radius:7px;background:'+(ST.carUse?'#D6E4F0':'#F7F9FC')+';cursor:pointer" id="km-toggle">'
@@ -289,7 +289,8 @@ function r0(){
   document.getElementById("f-dt").onchange=e=>ST.dateTo=e.target.value;
   document.getElementById("f-dest").oninput=e=>ST.destination=e.target.value;
   document.getElementById("f-scope").oninput=e=>ST.scope=e.target.value;
-  document.getElementById("f-cost").oninput=e=>{ST.estimatedCost=e.target.value;r0()};
+  document.getElementById("f-cost").onblur=e=>{ST.estimatedCost=e.target.value;r0()};
+  document.getElementById("f-cost").oninput=e=>{ST.estimatedCost=e.target.value;};
   document.querySelectorAll(".type-btn").forEach(b=>b.onclick=()=>{ST.expType=b.dataset.t;if(ST.expType!=="Progetti 26")ST.project="";r0()});
   const ps=document.getElementById("fp");if(ps)ps.onchange=e=>ST.project=e.target.value;
   const kt=document.getElementById("km-toggle");
@@ -332,12 +333,12 @@ async function submitRequest(){
   };
 
   try{
-    await fetch(PA_WEBHOOK_URL,{
+    const resp = await fetch(PA_WEBHOOK_URL,{
       method:"POST",
       headers:{"Content-Type":"application/json"},
-      body:JSON.stringify(payload),
-      mode:"no-cors"
+      body:JSON.stringify(payload)
     });
+    if(!resp.ok && resp.status !== 0) throw new Error("HTTP "+resp.status);
     ST.requestSent=true;
     r0();
   }catch(e){
@@ -387,8 +388,8 @@ function r1(){
       +'<input type="text" id="fa" placeholder="e.g. AUTH-2026-045 (from approval email)" value="'+ST.auth+'"></div>'
     +'<div class="field"><label class="lbl">Expense Type <span class="req">*</span></label>'
       +'<div class="type-row">'
-        +'<button class="type-btn'+(ST.expType==="Spese di funzionamento"?" sel":"")+'" data-t="Spese di funzionamento">Spese di funzionamento</button>'
-        +'<button class="type-btn'+(ST.expType==="Progetti 26"?" sel":"")+'" data-t="Progetti 26">Progetti 26</button>'
+        +'<button class="type-btn'+(ST.expType==="Spese di funzionamento"?" sel":"")+'" data-t="Spese di funzionamento">Institutional activities</button>'
+        +'<button class="type-btn'+(ST.expType==="Progetti 26"?" sel":"")+'" data-t="Progetti 26">Projects 2026</button>'
       +'</div></div>'
     +projHtml
     +kmHtml;
