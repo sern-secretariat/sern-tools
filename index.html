@@ -118,7 +118,29 @@ const EMP=[
 const PROJECTS=["ACCREDITATION 24-25","ACCREDITATION 25-26","BRIDGE 26","FOOD4FUTURE 26","INTEC 26","RETHINK 26","STEAM 26","STRADE FUTURE 26","TRANSMICVET 26"];
 const CATS=["Meals","Flight","Accommodation","Train-bus-taxi","Car rental","Fuel","Telepass","Fees","Other"];
 const CICONS={Meals:"🍽️",Flight:"✈️",Accommodation:"🏨","Train-bus-taxi":"🚆","Car rental":"🚗",Fuel:"⛽",Telepass:"🛣️",Fees:"📋",Other:"📎"};
-let ST={step:1,emp:null,mission:"",auth:"",expType:"Spese di funzionamento",project:"",kmApproved:false,files:[],rows:[],proc:false,procMsg:"",expanded:{}};
+// ⚠️ CONFIGURE: paste your Power Automate webhook URL here (never commit to GitHub)
+const PA_WEBHOOK_URL = "YOUR_POWER_AUTOMATE_WEBHOOK_URL_HERE";
+
+let ST={
+  step:0,
+  // Step 0 — Mission request
+  emp:null,
+  missionName:"",
+  dateFrom:"",dateTo:"",
+  destination:"",
+  scope:"",
+  expType:"Spese di funzionamento",
+  project:"",
+  carUse:false,
+  carReason:"",
+  estimatedCost:"",
+  missionRef:"",
+  requestSent:false,
+  // Step 1+
+  auth:"",
+  kmApproved:false,
+  files:[],rows:[],proc:false,procMsg:"",expanded:{}
+};
 let rid=1,fid=1;
 const ni=()=>rid++;
 
@@ -168,14 +190,163 @@ async function parseReceipt(file){
 }
 
 function render(){
-  // Steps
+  // Steps bar
   const bar=document.getElementById("steps-bar");
-  bar.innerHTML=["Setup","Upload","Review"].map((l,i)=>{
-    const n=i+1,cls=n<ST.step?"done":n===ST.step?"active":"";
-    return`<div class="step-item ${cls}"><div class="step-circle">${n<ST.step?"✓":n}</div><div class="step-label">${l}</div></div>`;
+  bar.innerHTML=["Request","Setup","Upload","Review"].map((l,i)=>{
+    const n=i;
+    const cls=n<ST.step?"done":n===ST.step?"active":"";
+    return'<div class="step-item '+cls+'"><div class="step-circle">'+(n<ST.step?"✓":(n+1))+'</div><div class="step-label">'+l+'</div></div>';
   }).join("");
-  if(ST.step===1)r1();else if(ST.step===2)r2();else r3();
+  if(ST.step===0)r0();else if(ST.step===1)r1();else if(ST.step===2)r2();else r3();
 }
+
+function r0(){
+  const c=document.getElementById("content");
+  const CAR_REASONS=[
+    "Destination not reachable by public transport",
+    "Public transport not available at required times",
+    "Car cheaper than available public transport",
+    "Transport of materials required",
+    "Other"
+  ];
+  const projHtml=ST.expType==="Progetti 26"
+    ?'<div class="field"><label class="lbl">Project <span class="req">*</span></label>'
+      +'<div style="position:relative"><select id="fp" class="sern-input" style="width:100%;padding:10px 12px;border:1.5px solid #E8EEF5;border-radius:6px;font-family:sans-serif;font-size:14px;color:#1A2E42;background:#fff;appearance:none;outline:none;box-sizing:border-box;background-image:url(\'data:image/svg+xml,%3Csvg xmlns=\\\'http://www.w3.org/2000/svg\\\' width=\\\'10\\\' height=\\\'7\\\'%3E%3Cpath fill=\\\'%231F4E79\\\' d=\\\'M5 7L0 0h10z\\\'/%3E%3C/svg%3E\');background-repeat:no-repeat;background-position:right 12px center;padding-right:32px"><option value="">— Select project —</option>'+PROJECTS.map(p=>'<option value="'+p+'"'+(ST.project===p?' selected':'')+'>'+p+'</option>').join('')+'</select></div></div>'
+    :'';
+  const carReasonHtml=ST.carUse
+    ?'<div class="field"><label class="lbl">Car use reason <span class="req">*</span></label>'
+      +'<div style="display:flex;flex-direction:column;gap:7px" id="car-reasons">'
+      +CAR_REASONS.map((r,i)=>'<label style="display:flex;align-items:center;gap:9px;padding:9px 12px;border:1.5px solid '+(ST.carReason===r?'#1F4E79':'#E8EEF5')+';border-radius:6px;cursor:pointer;font-family:sans-serif;font-size:13px;background:'+(ST.carReason===r?'#D6E4F0':'#fff')+'">'
+        +'<input type="radio" name="carReason" value="'+r+'"'+(ST.carReason===r?' checked':'')+' style="accent-color:#1F4E79;flex-shrink:0">'+r+'</label>').join('')
+      +'</div></div>'
+    :'';
+
+  if(ST.requestSent){
+    c.innerHTML=
+      '<div class="summ-card" style="text-align:center">'
+        +'<div style="font-size:32px;margin-bottom:10px">✅</div>'
+        +'<div class="s-label">Request submitted</div>'
+        +'<div class="s-val" style="font-size:16px;margin:6px 0">'+ST.missionName+'</div>'
+        +'<div style="font-size:13px;color:#A8C8E8;margin-top:8px;font-family:sans-serif">Nicola will review your request in Teams.<br>You will receive an email when approved.</div>'
+      +'</div>'
+      +'<div class="alert-info"><span>ℹ️</span><span style="font-family:sans-serif">Once approved, reopen this tool and enter your authorization reference to submit expenses.</span></div>';
+    document.getElementById("footer").innerHTML='';
+    return;
+  }
+
+  c.innerHTML=
+    '<div class="sec-title">Mission Request</div>'
+    +'<div class="sec-sub">Complete this form to request authorization. You will receive an email once approved.</div>'
+    +'<div class="field"><label class="lbl">Employee <span class="req">*</span></label>'
+      +'<div class="emp-grid" id="eg"></div></div>'
+    +'<div class="field"><label class="lbl">Mission name <span class="req">*</span></label>'
+      +'<input type="text" id="f-mn" placeholder="e.g. GA 2026 – Brussels" value="'+ST.missionName+'" style="width:100%;padding:10px 12px;border:1.5px solid #E8EEF5;border-radius:6px;font-family:sans-serif;font-size:14px;color:#1A2E42;background:#fff;outline:none;box-sizing:border-box"></div>'
+    +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px">'
+      +'<div><label class="lbl">Start date <span class="req">*</span></label>'
+        +'<input type="date" id="f-df" value="'+ST.dateFrom+'" style="width:100%;padding:10px 12px;border:1.5px solid #E8EEF5;border-radius:6px;font-family:sans-serif;font-size:14px;color:#1A2E42;background:#fff;outline:none;box-sizing:border-box"></div>'
+      +'<div><label class="lbl">End date <span class="req">*</span></label>'
+        +'<input type="date" id="f-dt" value="'+ST.dateTo+'" style="width:100%;padding:10px 12px;border:1.5px solid #E8EEF5;border-radius:6px;font-family:sans-serif;font-size:14px;color:#1A2E42;background:#fff;outline:none;box-sizing:border-box"></div>'
+    +'</div>'
+    +'<div class="field"><label class="lbl">Destination <span class="req">*</span></label>'
+      +'<input type="text" id="f-dest" placeholder="e.g. Brussels, Belgium" value="'+ST.destination+'" style="width:100%;padding:10px 12px;border:1.5px solid #E8EEF5;border-radius:6px;font-family:sans-serif;font-size:14px;color:#1A2E42;background:#fff;outline:none;box-sizing:border-box"></div>'
+    +'<div class="field"><label class="lbl">Purpose <span class="req">*</span></label>'
+      +'<input type="text" id="f-scope" placeholder="e.g. Partner meeting, GA 2026" value="'+ST.scope+'" style="width:100%;padding:10px 12px;border:1.5px solid #E8EEF5;border-radius:6px;font-family:sans-serif;font-size:14px;color:#1A2E42;background:#fff;outline:none;box-sizing:border-box"></div>'
+    +'<div class="field"><label class="lbl">Expense type <span class="req">*</span></label>'
+      +'<div class="type-row">'
+        +'<button class="type-btn'+(ST.expType==="Spese di funzionamento"?" sel":"")+'" data-t="Spese di funzionamento">Spese di funzionamento</button>'
+        +'<button class="type-btn'+(ST.expType==="Progetti 26"?" sel":"")+'" data-t="Progetti 26">Progetti 26</button>'
+      +'</div></div>'
+    +projHtml
+    +'<div class="field"><label class="lbl">Estimated cost (€)</label>'
+      +'<input type="number" id="f-cost" placeholder="e.g. 450" value="'+ST.estimatedCost+'" style="width:100%;padding:10px 12px;border:1.5px solid #E8EEF5;border-radius:6px;font-family:sans-serif;font-size:14px;color:#1A2E42;background:#fff;outline:none;box-sizing:border-box">'
+      +(parseFloat(ST.estimatedCost)>=300?'<div style="margin-top:6px;font-size:12px;color:#E65100;font-family:sans-serif">⚠️ Cost ≥ €300 — remember to collect at least 2 quotes per item</div>':'')
+    +'</div>'
+    +'<div class="field" style="margin-top:6px"><label class="lbl">Car use</label>'
+      +'<div style="display:flex;align-items:center;gap:12px;padding:11px 13px;border:1.5px solid '+(ST.carUse?'#1F4E79':'#E8EEF5')+';border-radius:7px;background:'+(ST.carUse?'#D6E4F0':'#F7F9FC')+';cursor:pointer" id="km-toggle">'
+        +'<div style="width:38px;height:22px;border-radius:11px;background:'+(ST.carUse?'#1F4E79':'#D1D5DB')+';position:relative;flex-shrink:0;transition:background .2s">'
+          +'<div style="width:18px;height:18px;border-radius:50%;background:#fff;position:absolute;top:2px;left:'+(ST.carUse?'18px':'2px')+';transition:left .2s;box-shadow:0 1px 3px rgba(0,0,0,.2)"></div>'
+        +'</div>'
+        +'<div>'
+          +'<div style="font-size:13px;font-weight:600;color:'+(ST.carUse?'#1F4E79':'#4A6880')+';font-family:sans-serif">'+(ST.carUse?'Personal car requested':'Not requested')+'</div>'
+          +'<div style="font-size:11px;color:#9AAFC5;font-family:sans-serif;margin-top:1px">Requires Director approval</div>'
+        +'</div>'
+      +'</div></div>'
+    +carReasonHtml;
+
+  // Employee grid
+  const eg=document.getElementById("eg");
+  EMP.forEach(e=>{
+    const d=document.createElement("div");
+    d.className="emp-card"+(ST.emp?.id===e.id?" sel":"");
+    d.innerHTML='<div class="emp-name">'+e.name+'</div><div class="emp-base">'+e.base+'</div>';
+    d.onclick=()=>{ST.emp=e;ST.kmApproved=(e.id==="nicola");r0()};
+    eg.appendChild(d);
+  });
+
+  // Events
+  document.getElementById("f-mn").oninput=e=>ST.missionName=e.target.value;
+  document.getElementById("f-df").onchange=e=>ST.dateFrom=e.target.value;
+  document.getElementById("f-dt").onchange=e=>ST.dateTo=e.target.value;
+  document.getElementById("f-dest").oninput=e=>ST.destination=e.target.value;
+  document.getElementById("f-scope").oninput=e=>ST.scope=e.target.value;
+  document.getElementById("f-cost").oninput=e=>{ST.estimatedCost=e.target.value;r0()};
+  document.querySelectorAll(".type-btn").forEach(b=>b.onclick=()=>{ST.expType=b.dataset.t;if(ST.expType!=="Progetti 26")ST.project="";r0()});
+  const ps=document.getElementById("fp");if(ps)ps.onchange=e=>ST.project=e.target.value;
+  const kt=document.getElementById("km-toggle");
+  if(kt)kt.onclick=()=>{ST.carUse=!ST.carUse;if(!ST.carUse)ST.carReason="";r0()};
+  const crDiv=document.getElementById("car-reasons");
+  if(crDiv)crDiv.querySelectorAll("input[name=carReason]").forEach(el=>el.onchange=e=>{ST.carReason=e.target.value;r0()});
+
+  // Footer
+  document.getElementById("footer").innerHTML=
+    '<button class="btn-primary" id="b0n">Send Authorization Request →</button>';
+  document.getElementById("b0n").onclick=submitRequest;
+}
+
+async function submitRequest(){
+  if(!ST.emp)return toast("⚠️ Select an employee");
+  if(!ST.missionName.trim())return toast("⚠️ Enter a mission name");
+  if(!ST.dateFrom)return toast("⚠️ Enter start date");
+  if(!ST.dateTo)return toast("⚠️ Enter end date");
+  if(!ST.destination.trim())return toast("⚠️ Enter destination");
+  if(!ST.scope.trim())return toast("⚠️ Enter purpose");
+  if(ST.expType==="Progetti 26"&&!ST.project)return toast("⚠️ Select a project");
+  if(ST.carUse&&!ST.carReason)return toast("⚠️ Select a reason for car use");
+
+  const btn=document.getElementById("b0n");
+  btn.textContent="⏳ Sending...";btn.disabled=true;
+
+  const payload={
+    employee:ST.emp.name,
+    email:ST.emp.id==="nicola"?"nicola.catellani@sern.eu":ST.emp.id+".sern@sern.eu",
+    missionName:ST.missionName,
+    dateFrom:ST.dateFrom,
+    dateTo:ST.dateTo,
+    destination:ST.destination,
+    scope:ST.scope,
+    expenseType:ST.expType,
+    project:ST.project||"",
+    carUse:ST.carUse,
+    carReason:ST.carReason||"",
+    estimatedCost:parseFloat(ST.estimatedCost)||0
+  };
+
+  try{
+    await fetch(PA_WEBHOOK_URL,{
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify(payload),
+      mode:"no-cors"
+    });
+    ST.requestSent=true;
+    r0();
+  }catch(e){
+    toast("⚠️ Error sending request — check connection");
+    btn.textContent="Send Authorization Request →";
+    btn.disabled=false;
+  }
+}
+
 
 function r1(){
   const c=document.getElementById("content");
@@ -211,7 +382,7 @@ function r1(){
     +'<div class="field"><label class="lbl">Employee <span class="req">*</span></label>'
       +'<div class="emp-grid" id="eg"></div></div>'
     +'<div class="field"><label class="lbl">Mission Name <span class="req">*</span></label>'
-      +'<input type="text" id="fm" placeholder="e.g. Partner Meeting – Stockholm May 2026" value="'+ST.mission+'"></div>'
+      +'<input type="text" id="fm" placeholder="e.g. Partner Meeting – Stockholm May 2026" value="'+ST.missionName+'"></div>'
     +'<div class="field"><label class="lbl">Authorization Reference <span class="req">*</span></label>'
       +'<input type="text" id="fa" placeholder="e.g. AUTH-2026-045 (from approval email)" value="'+ST.auth+'"></div>'
     +'<div class="field"><label class="lbl">Expense Type <span class="req">*</span></label>'
@@ -229,15 +400,16 @@ function r1(){
     d.onclick=()=>{ST.emp=e;ST.kmApproved=(e.id==="nicola");render()};
     eg.appendChild(d);
   });
-  document.getElementById("fm").oninput=e=>ST.mission=e.target.value;
+  document.getElementById("fm").oninput=e=>ST.missionName=e.target.value;
   document.getElementById("fa").oninput=e=>ST.auth=e.target.value;
   document.querySelectorAll(".type-btn").forEach(b=>b.onclick=()=>{ST.expType=b.dataset.t;if(ST.expType!=="Progetti 26")ST.project="";render()});
   const ps=document.getElementById("fp");if(ps)ps.onchange=e=>ST.project=e.target.value;
   const kt=document.getElementById("km-toggle");if(kt)kt.onclick=()=>{ST.kmApproved=!ST.kmApproved;r1()};
-  document.getElementById("footer").innerHTML=`<button class="btn-primary" id="b1n">Continue to Upload →</button>`;
+  document.getElementById("footer").innerHTML='<div class="btn-row"><button class="btn-secondary" id="b1b">← Back</button><button class="btn-primary" id="b1n" style="flex:2">Continue to Upload →</button></div>';
+  document.getElementById("b1b").onclick=()=>{ST.step=0;render()};
   document.getElementById("b1n").onclick=()=>{
     if(!ST.emp)return toast("⚠️ Select an employee");
-    if(!ST.mission.trim())return toast("⚠️ Enter a mission name");
+    if(!ST.missionName.trim())return toast("⚠️ Enter a mission name");
     if(!ST.auth.trim())return toast("⚠️ Enter authorization reference");
     if(ST.expType==="Progetti 26"&&!ST.project)return toast("⚠️ Select a project");
     ST.step=2;render();
