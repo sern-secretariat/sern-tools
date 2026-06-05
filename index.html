@@ -107,13 +107,13 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
 
 <script>
 const EMP=[
-  {id:"nicola",  name:"Nicola",   base:"Reggio Emilia",    card:"credit_card",    km:true,  tpl:"KM"},
-  {id:"ginevra", name:"Ginevra",  base:"Scandiano RE",     card:"ginevra_soldo",  km:true,  tpl:"KM"},
-  {id:"laura",   name:"Laura",    base:"Casalmaggiore MN", card:"laura_soldo",    km:true,  tpl:"KM"},
-  {id:"federica",name:"Federica", base:"Sorbolo PR",       card:"federica_soldo", km:true,  tpl:"KM"},
-  {id:"alessia", name:"Alessia",  base:"—",                card:"alessia_soldo",  km:false, tpl:"Standard"},
-  {id:"nanna",   name:"Nanna",    base:"—",                card:"nanna_soldo",    km:false, tpl:"Standard"},
-  {id:"sofia",   name:"Sofia",    base:"—",                card:"sofia_soldo",    km:false, tpl:"Standard"},
+  {id:"nicola",  name:"Nicola",   base:"Reggio Emilia",    card:"unicredit_2139", km:true,  tpl:"KM"},
+  {id:"ginevra", name:"Ginevra",  base:"Scandiano RE",     card:"soldo_ginevra",  km:true,  tpl:"KM"},
+  {id:"laura",   name:"Laura",    base:"Casalmaggiore MN", card:"soldo_laura",    km:true,  tpl:"KM"},
+  {id:"federica",name:"Federica", base:"Sorbolo PR",       card:"soldo_federica", km:true,  tpl:"KM"},
+  {id:"alessia", name:"Alessia",  base:"—",                card:"",               km:false, tpl:"Standard"},
+  {id:"nanna",   name:"Nanna",    base:"—",                card:"soldo_nanna",    km:false, tpl:"Standard"},
+  {id:"sofia",   name:"Sofia",    base:"—",                card:"",               km:false, tpl:"Standard"},
 ];
 const PROJECTS=["ACCREDITATION 24-25","ACCREDITATION 25-26","BRIDGE 26","FOOD4FUTURE 26","INTEC 26","RETHINK 26","STEAM 26","STRADE FUTURE 26","TRANSMICVET 26"];
 const CATS=["Meals","Flight","Accommodation","Train-bus-taxi","Car rental","Fuel","Telepass","Fees","Other"];
@@ -521,7 +521,10 @@ function r2(){
   c.innerHTML=
     '<div class="sec-title">Upload Documents</div>'
     +'<div class="sec-sub">Add receipts, card statement, and Telepass PDF if applicable.</div>'
-    +'<div class="alert-info"><span>ℹ️</span><span>Card filename: <strong>'+ST.emp.card+'_YYYY-MM</strong> — role auto-detected</span></div>'
+    +(ST.emp.card
+      ?'<div class="alert-info"><span>ℹ️</span><span style="font-family:sans-serif;font-size:13px">Card statement filename: <strong>'+ST.emp.card+'_YYYY-MM.pdf</strong><br>Upload from: Card Statements 26 / '+ST.emp.name+'</span></div>'
+      :'<div class="alert-info"><span>ℹ️</span><span style="font-family:sans-serif;font-size:13px">No company card — upload your personal receipts only. Reimbursement will be calculated from receipts.</span></div>'
+    )
     +'<div class="drop-zone" id="dz">'
       +'<div style="font-size:32px;margin-bottom:8px">📎</div>'
       +'<div style="font-size:14px;color:#4A6880;font-family:sans-serif"><strong>Tap to add files</strong><br>PDF, JPG, PNG, HEIC accepted</div>'
