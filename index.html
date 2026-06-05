@@ -118,6 +118,9 @@ const EMP=[
 const PROJECTS=["ACCREDITATION 24-25","ACCREDITATION 25-26","BRIDGE 26","FOOD4FUTURE 26","INTEC 26","RETHINK 26","STEAM 26","STRADE FUTURE 26","TRANSMICVET 26"];
 const CATS=["Meals","Flight","Accommodation","Train-bus-taxi","Car rental","Fuel","Telepass","Fees","Other"];
 const CICONS={Meals:"🍽️",Flight:"✈️",Accommodation:"🏨","Train-bus-taxi":"🚆","Car rental":"🚗",Fuel:"⛽",Telepass:"🛣️",Fees:"📋",Other:"📎"};
+// ⚠️ CONFIGURE: paste your Anthropic API key here (never commit to GitHub)
+const ANTHROPIC_API_KEY = "YOUR_ANTHROPIC_API_KEY_HERE";
+
 // ⚠️ CONFIGURE: paste your Power Automate webhook URL here (never commit to GitHub)
 const PA_WEBHOOK_URL = "https://default27d8109b12614066badbab8867b147.c2.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/22a019d497e04dc4b26f4d521d0d2a52/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=RLNtVQceKw3_iwJwt2bHFEdaW8c6zN8XY8NuGIX3HuQ";
 
@@ -180,8 +183,14 @@ async function parseReceipt(file){
   if(!isImg&&!isPdf)return null;
   const b64=await fileToB64(file);
   const part=isImg?{type:"image",source:{type:"base64",media_type:file.type,data:b64}}:{type:"document",source:{type:"base64",media_type:"application/pdf",data:b64}};
+  const headers={"Content-Type":"application/json"};
+  if(ANTHROPIC_API_KEY && ANTHROPIC_API_KEY!=="YOUR_ANTHROPIC_API_KEY_HERE"){
+    headers["x-api-key"]=ANTHROPIC_API_KEY;
+    headers["anthropic-version"]="2023-06-01";
+    headers["anthropic-dangerous-direct-browser-access"]="true";
+  }
   const res=await fetch("https://api.anthropic.com/v1/messages",{
-    method:"POST",headers:{"Content-Type":"application/json"},
+    method:"POST",headers:headers,
     body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:800,
       messages:[{role:"user",content:[part,{type:"text",
         text:'Extract: date (YYYY-MM-DD), total amount, currency (ISO 3-letter), merchant description max 5 words, category from Meals|Flight|Accommodation|Train-bus-taxi|Car rental|Fuel|Telepass|Fees|Other. Food/restaurant=Meals. Reply ONLY valid JSON no markdown: {"date":"","amount":0,"currency":"EUR","description":"","category":""}'}]}]})});
@@ -521,6 +530,10 @@ function r2(){
   c.innerHTML=
     '<div class="sec-title">Upload Documents</div>'
     +'<div class="sec-sub">Add receipts and your card statement. Nicola: add Telepass PDF if applicable.</div>'
+    +((!ANTHROPIC_API_KEY||ANTHROPIC_API_KEY==="YOUR_ANTHROPIC_API_KEY_HERE")
+      ?'<div class="alert-warn"><span>⚠️</span><span style="font-family:sans-serif;font-size:13px">AI receipt parsing not available — receipts will be added as empty rows for manual completion.</span></div>'
+      :''
+    )
     +(ST.emp.card
       ?'<div class="alert-info"><span>ℹ️</span><span style="font-family:sans-serif;font-size:13px">Card statement filename: <strong>'+ST.emp.card+'_YYYY-MM.pdf</strong><br>Upload from: Card Statements 26 / '+ST.emp.name+'</span></div>'
       :'<div class="alert-info"><span>ℹ️</span><span style="font-family:sans-serif;font-size:13px">No company card — upload your personal receipts only. Reimbursement will be calculated from receipts.</span></div>'
@@ -587,7 +600,14 @@ async function processFiles(){
       rf.status="done";
       newRows.push(p?{id:ni(),date:p.date||"",desc:p.description||rf.file.name.replace(/\.[^.]+$/,""),cat:p.category||catFromText(p.description||""),amt:p.amount||0,origCur:p.currency||"EUR",km:"",isDup:false,src:rf.file.name}
         :{id:ni(),date:"",desc:rf.file.name.replace(/\.[^.]+$/,""),cat:"Other",amt:0,origCur:"EUR",km:"",isDup:false,src:rf.file.name});
-    }catch{rf.status="error"}
+    }catch{
+      rf.status="error";
+      // Fallback: create empty row for manual completion
+      newRows.push({
+        id:ni(),date:"",desc:rf.file.name.replace(/\.[^.]+$/,""),
+        cat:"Other",amt:0,origCur:"EUR",km:"",isDup:false,src:rf.file.name
+      });
+    }
   }
   const final=dupCheck(newRows);
   ST.rows=final;ST.expanded=Object.fromEntries(final.filter(r=>r.isDup).map(r=>[r.id,true]));
@@ -625,10 +645,10 @@ function r3(){
   c.innerHTML=
     '<div class="summ-card">'
       +'<div class="s-label">Mission</div>'
-      +'<div class="s-val">'+ST.mission+'</div>'
+      +'<div class="s-val">'+(ST.missionName||'—')+'</div>'
       +'<div class="s-grid">'
         +'<div class="s-item"><div class="s-label">Employee</div><div class="s-val" style="font-size:14px">'+emp.name+'</div></div>'
-        +'<div class="s-item"><div class="s-label">Type</div><div class="s-val" style="font-size:12px">'+ST.expType+'</div></div>'
+        +'<div class="s-item"><div class="s-label">Type</div><div class="s-val" style="font-size:12px">'+(ST.expType==="Spese di funzionamento"?"Institutional activities":ST.expType==="Progetti 26"?"Projects 2026":ST.expType)+'</div></div>'
         +projItem
         +'<div class="s-item" style="grid-column:1/-1"><div class="s-label">Auth Ref</div><div class="s-val" style="font-size:12px">'+ST.auth+'</div></div>'
       +'</div>'
@@ -726,7 +746,7 @@ function generate(){
 
 **MISSION**
 - Employee: ${emp.name} (Template: ${emp.tpl}${emp.km&&ST.kmApproved?" with KM":""}, Base: ${emp.base||"—"}, Card: ${emp.card})
-- Mission name: ${ST.mission}
+- Mission name: ${ST.missionName}
 - Auth reference: ${ST.auth}
 - Type: ${ST.expType}${ST.project?"\n- Project: "+ST.project:""}
 
