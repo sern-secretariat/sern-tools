@@ -192,9 +192,6 @@ async function parseReceipt(file){
   const isImg=file.type.startsWith("image/"),isPdf=file.type==="application/pdf";
   if(!isImg&&!isPdf)return null;
   const b64=await fileToB64(file);
-  const part=isImg?{type:"image",source:{type:"base64",media_type:file.type,data:b64}}:{type:"document",source:{type:"base64",media_type:"application/pdf",data:b64}};
-
-  // Use Cloudflare Worker proxy (avoids CORS issues with direct API calls)
   const res=await fetch(WORKER_URL,{
     method:"POST",
     headers:{"Content-Type":"application/json"},
@@ -602,9 +599,9 @@ async function processFiles(){
       rf.status="done";
       newRows.push(p?{id:ni(),date:p.date||"",desc:p.description||rf.file.name.replace(/\.[^.]+$/,""),cat:p.category||catFromText(p.description||""),amt:p.amount||0,origCur:p.currency||"EUR",km:"",isDup:false,src:rf.file.name}
         :{id:ni(),date:"",desc:rf.file.name.replace(/\.[^.]+$/,""),cat:"Other",amt:0,origCur:"EUR",km:"",isDup:false,src:rf.file.name});
-    }catch{
+    }catch(e){
+      console.error('Parse error for', rf.file.name, ':', e.message);
       rf.status="error";
-      // Fallback: create empty row for manual completion
       newRows.push({
         id:ni(),date:"",desc:rf.file.name.replace(/\.[^.]+$/,""),
         cat:"Other",amt:0,origCur:"EUR",km:"",isDup:false,src:rf.file.name
