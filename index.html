@@ -121,6 +121,9 @@ const CICONS={Meals:"🍽️",Flight:"✈️",Accommodation:"🏨","Train-bus-ta
 // ⚠️ CONFIGURE: paste your Anthropic API key here (never commit to GitHub)
 const ANTHROPIC_API_KEY = "YOUR_ANTHROPIC_API_KEY_HERE";
 
+// Cloudflare Worker proxy URL for receipt parsing
+const WORKER_URL = "https://sern-receipt-parser.nicola-catellani.workers.dev";
+
 // ⚠️ CONFIGURE: paste your Power Automate webhook URL here (never commit to GitHub)
 const PA_WEBHOOK_URL = "https://default27d8109b12614066badbab8867b147.c2.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/22a019d497e04dc4b26f4d521d0d2a52/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=RLNtVQceKw3_iwJwt2bHFEdaW8c6zN8XY8NuGIX3HuQ";
 
@@ -175,7 +178,14 @@ function fileToB64(file){return new Promise((res,rej)=>{const r=new FileReader()
 
 function dupCheck(rows){
   const seen=new Set();
-  return rows.map(r=>{const k=`${r.date}|${(parseFloat(r.amt)||0).toFixed(2)}`;const d=seen.has(k);seen.add(k);return{...r,isDup:d}});
+  return rows.map(r=>{
+    // Don't flag as duplicate if amount is 0 — not enough info yet
+    if((parseFloat(r.amt)||0)===0)return{...r,isDup:false};
+    const k=`${r.date}|${(parseFloat(r.amt)||0).toFixed(2)}`;
+    const d=seen.has(k);
+    seen.add(k);
+    return{...r,isDup:d};
+  });
 }
 
 async function parseReceipt(file){
@@ -183,20 +193,16 @@ async function parseReceipt(file){
   if(!isImg&&!isPdf)return null;
   const b64=await fileToB64(file);
   const part=isImg?{type:"image",source:{type:"base64",media_type:file.type,data:b64}}:{type:"document",source:{type:"base64",media_type:"application/pdf",data:b64}};
-  const headers={"Content-Type":"application/json"};
-  if(ANTHROPIC_API_KEY && ANTHROPIC_API_KEY!=="YOUR_ANTHROPIC_API_KEY_HERE"){
-    headers["x-api-key"]=ANTHROPIC_API_KEY;
-    headers["anthropic-version"]="2023-06-01";
-    headers["anthropic-dangerous-direct-browser-access"]="true";
-  }
-  const res=await fetch("https://api.anthropic.com/v1/messages",{
-    method:"POST",headers:headers,
-    body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:800,
-      messages:[{role:"user",content:[part,{type:"text",
-        text:'Extract: date (YYYY-MM-DD), total amount, currency (ISO 3-letter), merchant description max 5 words, category from Meals|Flight|Accommodation|Train-bus-taxi|Car rental|Fuel|Telepass|Fees|Other. Food/restaurant=Meals. Reply ONLY valid JSON no markdown: {"date":"","amount":0,"currency":"EUR","description":"","category":""}'}]}]})});
+
+  // Use Cloudflare Worker proxy (avoids CORS issues with direct API calls)
+  const res=await fetch(WORKER_URL,{
+    method:"POST",
+    headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({fileData:b64, mediaType:file.type})
+  });
   const data=await res.json();
-  const text=(data.content||[]).filter(b=>b.type==="text").map(b=>b.text).join("");
-  return JSON.parse(text.replace(/```json|```/g,"").trim());
+  if(data.error)throw new Error(data.error);
+  return data;
 }
 
 function render(){
@@ -530,10 +536,6 @@ function r2(){
   c.innerHTML=
     '<div class="sec-title">Upload Documents</div>'
     +'<div class="sec-sub">Add receipts and your card statement. Nicola: add Telepass PDF if applicable.</div>'
-    +((!ANTHROPIC_API_KEY||ANTHROPIC_API_KEY==="YOUR_ANTHROPIC_API_KEY_HERE")
-      ?'<div class="alert-warn"><span>⚠️</span><span style="font-family:sans-serif;font-size:13px">AI receipt parsing not available — receipts will be added as empty rows for manual completion.</span></div>'
-      :''
-    )
     +(ST.emp.card
       ?'<div class="alert-info"><span>ℹ️</span><span style="font-family:sans-serif;font-size:13px">Card statement filename: <strong>'+ST.emp.card+'_YYYY-MM.pdf</strong><br>Upload from: Card Statements 26 / '+ST.emp.name+'</span></div>'
       :'<div class="alert-info"><span>ℹ️</span><span style="font-family:sans-serif;font-size:13px">No company card — upload your personal receipts only. Reimbursement will be calculated from receipts.</span></div>'
