@@ -150,8 +150,8 @@ function toast(msg,d=2800){const t=document.getElementById("toast");t.textConten
 function detectRole(name,card){
   const f=name.toLowerCase();
   if(f.includes("telepass"))return"telepass";
-  if(f.includes(card.toLowerCase()))return"card";
-  for(const e of EMP)if(f.includes(e.card.toLowerCase()))return"card";
+  if(card && f.includes(card.toLowerCase()))return"card";
+  for(const e of EMP)if(e.card && f.includes(e.card.toLowerCase()))return"card";
   return"receipt";
 }
 
@@ -520,7 +520,7 @@ function r2(){
     :'';
   c.innerHTML=
     '<div class="sec-title">Upload Documents</div>'
-    +'<div class="sec-sub">Add receipts, card statement, and Telepass PDF if applicable.</div>'
+    +'<div class="sec-sub">Add receipts and your card statement. Nicola: add Telepass PDF if applicable.</div>'
     +(ST.emp.card
       ?'<div class="alert-info"><span>ℹ️</span><span style="font-family:sans-serif;font-size:13px">Card statement filename: <strong>'+ST.emp.card+'_YYYY-MM.pdf</strong><br>Upload from: Card Statements 26 / '+ST.emp.name+'</span></div>'
       :'<div class="alert-info"><span>ℹ️</span><span style="font-family:sans-serif;font-size:13px">No company card — upload your personal receipts only. Reimbursement will be calculated from receipts.</span></div>'
