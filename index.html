@@ -106,6 +106,14 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
 <input type="file" id="file-input" multiple accept=".pdf,.jpg,.jpeg,.png,.heic,.webp" style="display:none">
 
 <script>
+// Base coordinates for distance calculation
+const BASE_ADDRESSES={
+  nicola:   "Via Scaruffi, Reggio Emilia, Italy",
+  ginevra:  "Scandiano, Reggio Emilia, Italy",
+  laura:    "Casalmaggiore, Cremona, Italy",
+  federica: "Sorbolo, Parma, Italy"
+};
+
 const EMP=[
   {id:"nicola",  name:"Nicola",   base:"Reggio Emilia",    card:"unicredit_2139", km:true,  tpl:"KM"},
   {id:"ginevra", name:"Ginevra",  base:"Scandiano RE",     card:"soldo_ginevra",  km:true,  tpl:"KM"},
@@ -214,7 +222,7 @@ function render(){
     const cls=n<ST.step?"done":n===ST.step?"active":"";
     return'<div class="step-item '+cls+'"><div class="step-circle">'+(n<ST.step?"✓":(n+1))+'</div><div class="step-label">'+l+'</div></div>';
   }).join("");
-  if(ST.step===0)r0();else if(ST.step===1)r1();else if(ST.step===2)r2();else r3();
+  if(ST.step===0)r0();else if(ST.step===1)r1();else if(ST.step===2)r2();else if(ST.step===10)rKM();else r3();
 }
 
 function rHome(){
@@ -248,18 +256,20 @@ function rHome(){
           +'<div style="font-size:12px;color:#4A6880;font-family:sans-serif;margin-top:2px">Enter your authorization code from the approval email</div>'
         +'</div>'
       +'</div>'
-      +'<input type="text" id="f-home-ref" placeholder="MISS-2026-05-AVANZI-BRUSSELS" value="'+ST.auth+'" style="width:100%;padding:10px 12px;border:1.5px solid #E8EEF5;border-radius:6px;font-family:sans-serif;font-size:13px;color:#1A2E42;background:#fff;outline:none;box-sizing:border-box;margin-bottom:10px;letter-spacing:0.02em">'
-      +'<button id="btn-submit-expenses" style="width:100%;padding:12px;background:#1F4E79;color:#fff;border:none;border-radius:7px;font-size:14px;font-weight:600;cursor:pointer;font-family:sans-serif">Submit Expenses →</button>'
+      +'<input type="text" id="f-home-ref" placeholder="e.g. MISS-2026-05-SMITH-BRUSSELS" value="'+ST.auth+'" style="width:100%;padding:10px 12px;border:1.5px solid #E8EEF5;border-radius:6px;font-family:sans-serif;font-size:13px;color:#1A2E42;background:#fff;outline:none;box-sizing:border-box;margin-bottom:10px;letter-spacing:0.02em">'
+      +'<button id="btn-submit-expenses" style="width:100%;padding:12px;background:#1F4E79;color:#fff;border:none;border-radius:7px;font-size:14px;font-weight:600;cursor:pointer;font-family:sans-serif">Continue →</button>'
     +'</div>'
     +'<div style="text-align:center;font-size:11px;color:#9AAFC5;font-family:sans-serif">SERN Secretariat · sern-secretariat.github.io/sern-tools</div>';
 
   document.getElementById("btn-new-mission").onclick=()=>{ST.step=0;render()};
   document.getElementById("f-home-ref").oninput=e=>ST.auth=e.target.value;
   document.getElementById("btn-submit-expenses").onclick=()=>{
-    const ref=ST.auth.trim();
+    const ref=ST.auth.trim().toUpperCase();
     if(!ref)return toast("⚠️ Enter your authorization reference");
-    if(!ref.startsWith("MISS-"))return toast("⚠️ Invalid reference — should start with MISS-");
-    ST.step=1;render();
+    ST.auth=ref;
+    if(ref.startsWith("MISS-")){ST.step=1;render();}
+    else if(ref.startsWith("KM-")){ST.step=10;render();}
+    else return toast("⚠️ Invalid reference — should start with MISS- or KM-");
   };
   document.getElementById("footer").innerHTML='';
 }
@@ -493,7 +503,7 @@ function r1(){
       +(ST.auth&&!ST.missionName?'<div style="font-size:11px;color:#4A6880;font-family:sans-serif;margin-top:4px">ℹ️ Find the mission name in your approval email</div>':'')
     +'</div>'
     +'<div class="field"><label class="lbl">Authorization Reference <span class="req">*</span></label>'
-      +'<input type="text" id="fa" placeholder="e.g. MISS-2026-05-AVANZI-BRUSSELS" value="'+ST.auth+'"'+(ST.auth?' readonly style="background:#F7F9FC;color:#4A6880;border-color:#D6E4F0"':'')+'></div>'
+      +'<input type="text" id="fa" placeholder="e.g. MISS-2026-05-SMITH-BRUSSELS" value="'+ST.auth+'"'+(ST.auth?' readonly style="background:#F7F9FC;color:#4A6880;border-color:#D6E4F0"':'')+'></div>'
     +'<div class="field"><label class="lbl">Expense Type <span class="req">*</span></label>'
       +'<div class="type-row">'
         +'<button class="type-btn'+(ST.expType==="Spese di funzionamento"?" sel":"")+'" data-t="Spese di funzionamento">Institutional activities</button>'
@@ -738,34 +748,239 @@ function r3(){
 function generate(){
   const emp=ST.emp;
   const valid=ST.rows.filter(r=>!r.isDup);
+  if(!valid.length)return toast("\u26a0\ufe0f No expense rows to export");
   const total=valid.reduce((s,r)=>s+(parseFloat(r.amt)||0),0);
   const catT=valid.reduce((a,r)=>{a[r.cat]=(a[r.cat]||0)+(parseFloat(r.amt)||0);return a},{});
-  const rowsText=valid.map((r,i)=>`| ${i+1} | ${r.date} | ${r.desc} | ${r.cat} | €${(parseFloat(r.amt)||0).toFixed(2)} |${emp.km&&ST.kmApproved&&r.km?` ${r.km} km |`:""}`).join("\n");
-  const prompt=`Please fill the SERN travel expense Excel form with this mission data.
-
-**MISSION**
-- Employee: ${emp.name} (Template: ${emp.tpl}${emp.km&&ST.kmApproved?" with KM":""}, Base: ${emp.base||"—"}, Card: ${emp.card})
-- Mission name: ${ST.missionName}
-- Auth reference: ${ST.auth}
-- Type: ${ST.expType}${ST.project?"\n- Project: "+ST.project:""}
-
-**EXPENSE ROWS (${valid.length} items)**
-| # | Date | Description | Category | EUR |${emp.km&&ST.kmApproved?" KM |":""}
-|---|------|-------------|----------|-----|${emp.km&&ST.kmApproved?"-----|":""}
-${rowsText}
-
-**BY CATEGORY**
-${Object.entries(catT).map(([k,v])=>`- ${CICONS[k]} ${k}: €${v.toFixed(2)}`).join("\n")}
-
-**GRAND TOTAL: €${total.toFixed(2)}**
-
-Fill the SERN standard reimbursement Excel using the ${emp.tpl} template${emp.km&&ST.kmApproved?", including KM calculation section":""}. List any fields needing manual completion.`;
-
-  try{window.sendPrompt(prompt);toast("✅ Sent to Claude!")}
-  catch{navigator.clipboard?.writeText(prompt).then(()=>toast("📋 Prompt copied to clipboard!")).catch(()=>toast("⚠️ Ready — copy prompt manually"))}
+  const script=document.createElement('script');
+  script.src='https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
+  script.onload=()=>buildExcel(emp,valid,total,catT);
+  script.onerror=()=>toast("\u26a0\ufe0f Could not load Excel library");
+  document.head.appendChild(script);
+  toast("\u23f3 Generating Excel...");
 }
 
+function buildExcel(emp,valid,total,catT){
+  const XLSX=window.XLSX;
+  const wb=XLSX.utils.book_new();
+  const ws1Data=[];
+  ws1Data.push(["SERN SECRETARIAT \u2014 MISSION EXPENSE REPORT",""]);
+  ws1Data.push([""]);
+  ws1Data.push(["Employee:",emp.name,"Authorization Ref:",ST.auth]);
+  ws1Data.push(["Base:",emp.base||"\u2014","Mission name:",ST.missionName]);
+  ws1Data.push(["Card:",emp.card||"Personal","Expense type:",ST.expType==="Spese di funzionamento"?"Institutional activities":"Projects 2026"]);
+  if(ST.project)ws1Data.push(["Project:",ST.project]);
+  ws1Data.push([""]);
+  const tableHeader=["#","Date","Description","Category","Amount (EUR)"];
+  if(emp.km&&ST.kmApproved)tableHeader.push("KM");
+  ws1Data.push(tableHeader);
+  valid.forEach((r,i)=>{
+    const row=[i+1,r.date,r.desc,r.cat,parseFloat(r.amt)||0];
+    if(emp.km&&ST.kmApproved)row.push(r.km?parseInt(r.km):0);
+    ws1Data.push(row);
+  });
+  ws1Data.push([""]);
+  ws1Data.push(["TOTALS BY CATEGORY",""]);
+  Object.entries(catT).forEach(([cat,amt])=>{ws1Data.push([CICONS[cat]+" "+cat,"",parseFloat(amt.toFixed(2))])});
+  ws1Data.push(["GRAND TOTAL","",parseFloat(total.toFixed(2))]);
+  if(emp.km&&ST.kmApproved){
+    const kmRows=valid.filter(r=>r.km&&parseInt(r.km)>0);
+    if(kmRows.length){
+      ws1Data.push([""]);
+      ws1Data.push(["KM REIMBURSEMENT",""]);
+      ws1Data.push(["Date","Description","KM","Rate (\u20ac/km)","Amount"]);
+      kmRows.forEach(r=>{
+        const km=parseInt(r.km)||0;
+        ws1Data.push([r.date,r.desc,km,0.41,parseFloat((km*0.41).toFixed(2))]);
+      });
+      const totalKm=kmRows.reduce((s,r)=>s+(parseInt(r.km)||0),0);
+      ws1Data.push(["","TOTAL KM:",totalKm,"",parseFloat((totalKm*0.41).toFixed(2))]);
+    }
+  }
+  const ws1=XLSX.utils.aoa_to_sheet(ws1Data);
+  ws1["!cols"]=[{wch:20},{wch:14},{wch:35},{wch:20},{wch:14},{wch:10}];
+  XLSX.utils.book_append_sheet(wb,ws1,"Expense Report");
+  const ws2Data=[
+    ["SUMMARY",""],[""],
+    ["Mission:",ST.missionName],
+    ["Employee:",emp.name],
+    ["Auth reference:",ST.auth],
+    ["Date generated:",new Date().toLocaleDateString("en-GB")],
+    [""],["CATEGORY","Amount"]
+  ];
+  Object.entries(catT).forEach(([cat,amt])=>{ws2Data.push([CICONS[cat]+" "+cat,parseFloat(amt.toFixed(2))])});
+  ws2Data.push(["TOTAL EXPENSES",parseFloat(total.toFixed(2))]);
+  if(emp.km&&ST.kmApproved){
+    const totalKm=valid.filter(r=>r.km).reduce((s,r)=>s+(parseInt(r.km)||0),0);
+    ws2Data.push(["KM Reimbursement",parseFloat((totalKm*0.41).toFixed(2))]);
+    ws2Data.push(["GRAND TOTAL",parseFloat((total+totalKm*0.41).toFixed(2))]);
+  }
+  const ws2=XLSX.utils.aoa_to_sheet(ws2Data);
+  ws2["!cols"]=[{wch:30},{wch:14}];
+  XLSX.utils.book_append_sheet(wb,ws2,"Summary");
+  const filename=ST.auth+"_"+emp.name+"_expenses.xlsx";
+  XLSX.writeFile(wb,filename);
+  toast("\u2705 Excel downloaded: "+filename);
+}
+
+async function calcDistance(dest, empId){
+  const base=BASE_ADDRESSES[empId];
+  if(!base)return null;
+  try{
+    const res=await fetch(WORKER_URL,{
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({action:"distance",origin:base,destination:dest+", Italy"})
+    });
+    return await res.json();
+  }catch(e){return null;}
+}
+
+function rKM(){
+  const c=document.getElementById("content");
+  const parts=ST.auth.split("-");
+  const year=parts[1]||"2026";
+  const month=parts[2]||"";
+  const monthName=month?new Date(parseInt(year),parseInt(month)-1,1).toLocaleString("en-GB",{month:"long",year:"numeric"}):"";
+  if(!ST.kmRows)ST.kmRows=[{id:1,date:"",dest:"",km:"",notes:""}];
+  const rowsHtml=ST.kmRows.map((r,i)=>{
+    const rateLabel=r.rate?(r.inER?"🟢 ER €0.41":"🟠 Ext €0.22"):"";
+    const amtLabel=r.amount?(" = <strong>€"+r.amount.toFixed(2)+"</strong>"):"";
+    const calcStatus=r.calculating?"⏳ Calculating...":r.destName?('<span style="font-size:11px;color:#2E7D32">'+rateLabel+' · '+r.roundTripKm+'km RT'+amtLabel+'</span>'):"";
+    return '<div style="background:#F7F9FC;border:1.5px solid #E8EEF5;border-radius:8px;padding:10px;margin-bottom:8px">'
+      +'<div style="display:grid;grid-template-columns:130px 1fr 80px 32px;gap:6px;margin-bottom:6px;align-items:center">'
+        +'<input type="date" value="'+r.date+'" data-i="'+i+'" data-f="date" style="padding:8px;border:1.5px solid #E8EEF5;border-radius:6px;font-size:13px;font-family:sans-serif;outline:none;background:#fff">'
+        +'<input type="text" placeholder="Destination (e.g. Parma)" value="'+r.dest+'" data-i="'+i+'" data-f="dest" style="padding:8px;border:1.5px solid #E8EEF5;border-radius:6px;font-size:13px;font-family:sans-serif;outline:none;background:#fff">'
+        +'<input type="number" placeholder="KM" value="'+(r.roundTripKm||r.km||'')+'" data-i="'+i+'" data-f="km" style="padding:8px;border:1.5px solid #E8EEF5;border-radius:6px;font-size:13px;font-family:sans-serif;outline:none;background:#fff">'
+        +'<button data-del="'+i+'" style="width:28px;height:28px;background:#FEE2E2;border:none;border-radius:6px;cursor:pointer;font-size:14px;color:#DC2626">×</button>'
+      +'</div>'
+      +'<div style="display:grid;grid-template-columns:1fr auto;gap:6px;align-items:center">'
+        +'<input type="text" placeholder="Notes / purpose" value="'+r.notes+'" data-i="'+i+'" data-f="notes" style="padding:7px 10px;border:1.5px solid #E8EEF5;border-radius:6px;font-size:12px;font-family:sans-serif;outline:none;background:#fff">'
+        +'<button data-calc="'+i+'" style="padding:7px 12px;background:#1F4E79;color:#fff;border:none;border-radius:6px;font-size:12px;cursor:pointer;font-family:sans-serif;white-space:nowrap">📍 Calc KM</button>'
+      +'</div>'
+      +(calcStatus?'<div style="margin-top:6px;font-size:12px;font-family:sans-serif">'+calcStatus+'</div>':"")
+    +'</div>';
+  }).join("");
+  const totalKm=ST.kmRows.reduce((s,r)=>s+(parseInt(r.km)||0),0);
+  const totalAmt=(totalKm*0.41).toFixed(2);
+  c.innerHTML=
+    '<div class="sec-title">Monthly KM Reimbursement</div>'
+    +'<div class="sec-sub">'+ST.auth+(monthName?" — "+monthName:"")+'</div>'
+    +'<div style="background:#fff;border:1.5px solid #E8EEF5;border-radius:10px;padding:14px;margin-bottom:14px">'
+      +'<div style="display:grid;grid-template-columns:130px 1fr 80px 1fr 32px;gap:6px;margin-bottom:8px">'
+        +'<div style="font-size:11px;font-weight:700;color:#4A6880;font-family:sans-serif;text-transform:uppercase">Date</div>'
+        +'<div style="font-size:11px;font-weight:700;color:#4A6880;font-family:sans-serif;text-transform:uppercase">Destination</div>'
+        +'<div style="font-size:11px;font-weight:700;color:#4A6880;font-family:sans-serif;text-transform:uppercase">KM</div>'
+        +'<div style="font-size:11px;font-weight:700;color:#4A6880;font-family:sans-serif;text-transform:uppercase">Notes</div>'
+        +'<div></div>'
+      +'</div>'
+      +rowsHtml
+      +'<button id="km-add" style="width:100%;padding:9px;background:#F0F5FB;border:1.5px dashed #9AAFC5;border-radius:7px;font-size:13px;color:#1F4E79;cursor:pointer;font-family:sans-serif;margin-top:4px">+ Add trip</button>'
+    +'</div>'
+    +'<div style="background:#1F4E79;border-radius:10px;padding:14px;display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">'
+      +'<div style="color:#A8C8E8;font-family:sans-serif;font-size:13px">Total: <strong style="color:#fff">'+totalKm+' km</strong> × €0.41</div>'
+      +'<div style="color:#C9A84C;font-family:Georgia,serif;font-size:18px;font-weight:700">€ '+totalAmt+'</div>'
+    +'</div>';
+  c.querySelectorAll("input[data-f]").forEach(el=>{
+    el.oninput=e=>{
+      const i=parseInt(e.target.dataset.i);
+      const f=e.target.dataset.f;
+      ST.kmRows[i][f]=e.target.value;
+      if(f==="km"){
+        // Manual KM override — recalculate amount with existing rate
+        const r=ST.kmRows[i];
+        const km=parseInt(e.target.value)||0;
+        r.roundTripKm=km;
+        if(r.rate)r.amount=parseFloat((km*r.rate).toFixed(2));
+        rKM();
+      }
+    };
+  });
+  c.querySelectorAll("button[data-calc]").forEach(btn=>{
+    btn.onclick=async e=>{
+      const i=parseInt(e.target.dataset.calc);
+      const r=ST.kmRows[i];
+      if(!r.dest)return toast("⚠️ Enter destination first");
+      r.calculating=true;rKM();
+      const empId=ST.emp?ST.emp.id:"nicola";
+      const result=await calcDistance(r.dest,empId);
+      r.calculating=false;
+      if(!result||result.error){toast("⚠️ Could not calculate — enter KM manually");rKM();return;}
+      r.destName=result.destName;
+      r.oneWayKm=result.oneWayKm;
+      r.roundTripKm=result.roundTripKm;
+      r.inER=result.inER;
+      r.rate=result.rate;
+      r.amount=result.amount;
+      rKM();
+    };
+  });
+  c.querySelectorAll("button[data-del]").forEach(btn=>{
+    btn.onclick=e=>{
+      const i=parseInt(e.target.dataset.del);
+      ST.kmRows.splice(i,1);
+      if(!ST.kmRows.length)ST.kmRows=[{id:Date.now(),date:"",dest:"",km:"",notes:""}];
+      rKM();
+    };
+  });
+  document.getElementById("km-add").onclick=()=>{
+    ST.kmRows.push({id:Date.now(),date:"",dest:"",km:"",notes:""});
+    rKM();
+  };
+  document.getElementById("footer").innerHTML=
+    '<div class="btn-row"><button class="btn-secondary" id="km-back">← Home</button><button class="btn-primary" id="km-gen" style="flex:2">📥 Generate KM Report →</button></div>';
+  document.getElementById("km-back").onclick=()=>{ST.step=-1;ST.kmRows=null;render()};
+  document.getElementById("km-gen").onclick=generateKM;
+}
+
+function generateKM(){
+  const valid=ST.kmRows.filter(r=>r.km&&parseInt(r.km)>0);
+  if(!valid.length)return toast("⚠️ Add at least one trip with KM");
+  const parts=ST.auth.split("-");
+  const year=parts[1]||"2026";
+  const month=parts[2]||"";
+  const monthName=month?new Date(parseInt(year),parseInt(month)-1,1).toLocaleString("en-GB",{month:"long",year:"numeric"}):"";
+  const totalKm=valid.reduce((s,r)=>s+(parseInt(r.km)||0),0);
+  const totalAmt=(totalKm*0.41).toFixed(2);
+  const script=document.createElement('script');
+  script.src='https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
+  script.onload=()=>{
+    const XLSX=window.XLSX;
+    const wb=XLSX.utils.book_new();
+    const ws1Data=[
+      ["SERN SECRETARIAT — MONTHLY MILEAGE REIMBURSEMENT",""],
+      [""],
+      ["Employee:","Nicola Catellani","Reference:",ST.auth],
+      ["Period:",monthName,"Rate (€/km):","0.41"],
+      ["Date generated:",new Date().toLocaleDateString("en-GB")],
+      [""],
+      ["Date","Destination (return trip)","KM (RT)","Rate (€/km)","Amount (€)","Notes","Zone"],
+    ];
+    valid.forEach(r=>{
+      const km=r.roundTripKm||parseInt(r.km)||0;
+      const rate=r.rate||0.41;
+      const amt=r.amount||parseFloat((km*rate).toFixed(2));
+      const zone=r.inER===false?"Outside ER (€0.22/km)":"Emilia-Romagna (€0.41/km)";
+      ws1Data.push([r.date,r.dest,km,rate,amt,r.notes||"",zone]);
+    });
+    ws1Data.push([""]);
+    ws1Data.push(["","TOTAL KM:",totalKm,"","€"+totalAmt,"",""]);
+    ws1Data.push([""]);
+    ws1Data.push(["Signature (submitter):","","Authorised by:","Nicola Catellani"]);
+    const ws1=XLSX.utils.aoa_to_sheet(ws1Data);
+    ws1["!cols"]=[{wch:14},{wch:35},{wch:8},{wch:12},{wch:14},{wch:30},{wch:25}];
+    XLSX.utils.book_append_sheet(wb,ws1,"KM Report");
+    const filename=ST.auth+"_mileage_report.xlsx";
+    XLSX.writeFile(wb,filename);
+    toast("✅ KM Report downloaded: "+filename);
+  };
+  script.onerror=()=>toast("⚠️ Could not load Excel library");
+  document.head.appendChild(script);
+  toast("⏳ Generating KM Report...");
+}
+
+
 render();
+
 </script>
 </body>
 </html>
