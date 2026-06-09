@@ -890,11 +890,12 @@ function rKM(){
       const f=e.target.dataset.f;
       ST.kmRows[i][f]=e.target.value;
       if(f==="km"){
-        // Manual KM override — recalculate amount with existing rate
         const r=ST.kmRows[i];
         const km=parseInt(e.target.value)||0;
+        r.km=km;
         r.roundTripKm=km;
-        if(r.rate)r.amount=parseFloat((km*r.rate).toFixed(2));
+        if(!r.rate)r.rate=0.41; // default ER rate if not yet calculated
+        r.amount=parseFloat((km*r.rate).toFixed(2));
         rKM();
       }
     };
@@ -915,6 +916,7 @@ function rKM(){
       r.inER=result.inER;
       r.rate=result.rate;
       r.amount=result.amount;
+      console.log('KM row after calc:', JSON.stringify(r));
       rKM();
     };
   });
