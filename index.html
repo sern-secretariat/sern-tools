@@ -847,7 +847,7 @@ function rKM(){
     const amtLabel=r.amount?(" = <strong>€"+r.amount.toFixed(2)+"</strong>"):"";
     const calcStatus=r.calculating?"⏳ Calculating...":r.destName?('<span style="font-size:11px;color:#2E7D32">'+rateLabel+' · '+r.roundTripKm+'km RT'+amtLabel+'</span>'):"";
     return '<div style="background:#F7F9FC;border:1.5px solid #E8EEF5;border-radius:8px;padding:10px;margin-bottom:8px">'
-      +'<div style="display:grid;grid-template-columns:130px 1fr 80px 32px;gap:6px;margin-bottom:6px;align-items:center">'
+      +'<div style="display:grid;grid-template-columns:120px 1fr 70px 30px;gap:6px;margin-bottom:6px;align-items:center">'
         +'<input type="date" value="'+r.date+'" data-i="'+i+'" data-f="date" style="padding:8px;border:1.5px solid #E8EEF5;border-radius:6px;font-size:13px;font-family:sans-serif;outline:none;background:#fff">'
         +'<input type="text" placeholder="Destination (e.g. Parma)" value="'+r.dest+'" data-i="'+i+'" data-f="dest" style="padding:8px;border:1.5px solid #E8EEF5;border-radius:6px;font-size:13px;font-family:sans-serif;outline:none;background:#fff">'
         +'<input type="number" placeholder="KM" value="'+(r.roundTripKm||r.km||'')+'" data-i="'+i+'" data-f="km" style="padding:8px;border:1.5px solid #E8EEF5;border-radius:6px;font-size:13px;font-family:sans-serif;outline:none;background:#fff">'
@@ -860,13 +860,17 @@ function rKM(){
       +(calcStatus?'<div style="margin-top:6px;font-size:12px;font-family:sans-serif">'+calcStatus+'</div>':"")
     +'</div>';
   }).join("");
-  const totalKm=ST.kmRows.reduce((s,r)=>s+(parseInt(r.km)||0),0);
-  const totalAmt=(totalKm*0.41).toFixed(2);
+  const totalKm=ST.kmRows.reduce((s,r)=>s+(r.roundTripKm||parseInt(r.km)||0),0);
+  const totalAmt=ST.kmRows.reduce((s,r)=>{
+    const km=r.roundTripKm||parseInt(r.km)||0;
+    const rate=r.rate||0.41;
+    return s+km*rate;
+  },0).toFixed(2);
   c.innerHTML=
     '<div class="sec-title">Monthly KM Reimbursement</div>'
     +'<div class="sec-sub">'+ST.auth+(monthName?" — "+monthName:"")+'</div>'
     +'<div style="background:#fff;border:1.5px solid #E8EEF5;border-radius:10px;padding:14px;margin-bottom:14px">'
-      +'<div style="display:grid;grid-template-columns:130px 1fr 80px 1fr 32px;gap:6px;margin-bottom:8px">'
+      +'<div style="display:grid;grid-template-columns:120px 1fr 70px auto 30px;gap:6px;margin-bottom:8px">'
         +'<div style="font-size:11px;font-weight:700;color:#4A6880;font-family:sans-serif;text-transform:uppercase">Date</div>'
         +'<div style="font-size:11px;font-weight:700;color:#4A6880;font-family:sans-serif;text-transform:uppercase">Destination</div>'
         +'<div style="font-size:11px;font-weight:700;color:#4A6880;font-family:sans-serif;text-transform:uppercase">KM</div>'
@@ -877,7 +881,7 @@ function rKM(){
       +'<button id="km-add" style="width:100%;padding:9px;background:#F0F5FB;border:1.5px dashed #9AAFC5;border-radius:7px;font-size:13px;color:#1F4E79;cursor:pointer;font-family:sans-serif;margin-top:4px">+ Add trip</button>'
     +'</div>'
     +'<div style="background:#1F4E79;border-radius:10px;padding:14px;display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">'
-      +'<div style="color:#A8C8E8;font-family:sans-serif;font-size:13px">Total: <strong style="color:#fff">'+totalKm+' km</strong> × €0.41</div>'
+      +'<div style="color:#A8C8E8;font-family:sans-serif;font-size:13px">Total: <strong style="color:#fff">'+totalKm+' km</strong></div>'
       +'<div style="color:#C9A84C;font-family:Georgia,serif;font-size:18px;font-weight:700">€ '+totalAmt+'</div>'
     +'</div>';
   c.querySelectorAll("input[data-f]").forEach(el=>{
