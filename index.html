@@ -776,11 +776,13 @@ function buildExcel(emp,valid,total,catT){
     });
   }
 
-  // Helper to set cell
+  // Helper to set cell — preserves existing style (s) from template
   const sc=(addr,v,t)=>{
     if(!ws[addr])ws[addr]={};
-    ws[addr].v=v;ws[addr].t=t||'s';
+    ws[addr].v=v;
+    ws[addr].t=t||'s';
     if(t==='n')ws[addr].z='#,##0.00 €';
+    delete ws[addr].w; // force SheetJS to re-format
   };
 
   // Header
@@ -962,10 +964,13 @@ function generateKM(){
       });
     }
 
+    // Helper to set cell — preserves existing style (s) from template
     const sc=(addr,v,t)=>{
       if(!ws[addr])ws[addr]={};
-      ws[addr].v=v;ws[addr].t=t||'s';
+      ws[addr].v=v;
+      ws[addr].t=t||'s';
       if(t==='n')ws[addr].z='#,##0.00 €';
+      delete ws[addr].w; // force SheetJS to re-format
     };
 
     sc('C4','Nicola Catellani');
