@@ -761,16 +761,6 @@ function generate(){
   toast("\u23f3 Generating Excel...");
 }
 
-// Convert YYYY-MM-DD string to Excel serial date number
-function dateToExcel(s){
-  if(!s)return null;
-  const [y,m,d]=s.split('-').map(Number);
-  if(!y||!m||!d)return null;
-  const epoch=new Date(1899,11,30);
-  const dt=new Date(y,m-1,d);
-  return Math.round((dt-epoch)/(86400000));
-}
-
 function buildExcel(emp,valid,total,catT){
   const XLSX=window.XLSX;
   const useKM=emp.km&&ST.kmApproved&&valid.some(r=>r.km&&parseInt(r.km)>0);
@@ -788,7 +778,8 @@ function buildExcel(emp,valid,total,catT){
 
   // Helper to set cell
   const sc=(addr,v,t)=>{
-    ws[addr]={v:v,t:t||'s'};
+    if(!ws[addr])ws[addr]={};
+    ws[addr].v=v;ws[addr].t=t||'s';
     if(t==='n')ws[addr].z='#,##0.00 €';
   };
 
@@ -810,8 +801,7 @@ function buildExcel(emp,valid,total,catT){
 
   valid.forEach((row,i)=>{
     const r=12+i;
-    const ds=dateToExcel(row.date);
-    if(ds){ws['B'+r]={v:ds,t:'n',z:'YYYY-MM-DD'};}
+    if(row.date)sc('B'+r,row.date);
     sc('C'+r,row.desc||'');
     const amt=parseFloat(row.amt)||0;
     const col=CAT[row.cat]||'I';
@@ -846,10 +836,8 @@ async function calcDistance(dest, empId){
 function rKM(){
   const c=document.getElementById("content");
   const parts=ST.auth.split("-");
-  let year, month;
-  if(parts[1]&&parts[1].length===4){year=parts[1];month=parts[2];}
-  else{month=parts[1];year=parts[2];}
-  year=year||"2026";month=month||"";
+  const year=parts[1]||"2026";
+  const month=parts[2]||"";
   const monthName=month?new Date(parseInt(year),parseInt(month)-1,1).toLocaleString("en-GB",{month:"long",year:"numeric"}):"";
   if(!ST.kmRows)ST.kmRows=[{id:1,date:"",dest:"",km:"",notes:""}];
   const rowsHtml=ST.kmRows.map((r,i)=>{
@@ -954,11 +942,9 @@ function generateKM(){
   const valid=ST.kmRows.filter(r=>(r.roundTripKm&&r.roundTripKm>0)||(r.km&&parseInt(r.km)>0));
   if(!valid.length)return toast("⚠️ Add at least one trip with KM");
   const parts=ST.auth.split("-");
-  // Support both KM-2026-06-NICOLA and KM-06-2026-NICOLA
-  let year, month;
-  if(parts[1]&&parts[1].length===4){year=parts[1];month=parts[2];}
-  else{month=parts[1];year=parts[2];}
-  const monthName=(month&&year)?new Date(parseInt(year),parseInt(month)-1,1).toLocaleString("en-GB",{month:"long",year:"numeric"}):"";
+  const year=parts[1]||"2026";
+  const month=parts[2]||"";
+  const monthName=month?new Date(parseInt(year),parseInt(month)-1,1).toLocaleString("en-GB",{month:"long",year:"numeric"}):"";
   const totalKm=valid.reduce((s,r)=>s+(r.roundTripKm||parseInt(r.km)||0),0);
   const totalAmt=(totalKm*0.41).toFixed(2);
   const script=document.createElement('script');
@@ -968,22 +954,20 @@ function generateKM(){
     const wb=XLSX.read(TPL_KM,{type:'base64'});
     const ws=wb.Sheets['Travel Form'];
 
-    // Clear data rows 12-25 including formulas
+    // Clear data rows 12-25
     for(let r=12;r<=25;r++){
       ['B','C','D','E','F','G','H','I','J','K','L','M','N','O'].forEach(c=>{
-        delete ws[c+r];
+        const addr=c+r;
+        if(ws[addr]&&!ws[addr].f)delete ws[addr];
       });
-    }
-    // Restore formulas only for used rows
-    for(let r=12;r<12+valid.length;r++){
-      ws['J'+r]={f:'IF(I'+r+'>0,I'+r+'*$K$5,"")',t:'n'};
-      ws['O'+r]={f:'IFERROR(IF(D'+r+'+E'+r+'+F'+r+'+G'+r+'+H'+r+'+J'+r+'+K'+r+'+L'+r+'=0,"",D'+r+'+E'+r+'+F'+r+'+G'+r+'+H'+r+'+J'+r+'+K'+r+'+L'+r+'),"")' ,t:'n'};
     }
 
     const sc=(addr,v,t)=>{
-      ws[addr]={v:v,t:t||'s'};
-      if(t==='n'){ws[addr].z='#,##0.00 €';}
+      if(!ws[addr])ws[addr]={};
+      ws[addr].v=v;ws[addr].t=t||'s';
+      if(t==='n')ws[addr].z='#,##0.00 €';
     };
+
     sc('C4','Nicola Catellani');
     sc('K4','Nicola Catellani');
     sc('C5',ST.auth+' — '+monthName);
@@ -993,8 +977,7 @@ function generateKM(){
 
     valid.forEach((r,i)=>{
       const row=12+i;
-      const ds=dateToExcel(r.date);
-      if(ds){ws['B'+row]={v:ds,t:'n',z:'YYYY-MM-DD'};}
+      if(r.date)sc('B'+row,r.date);
       sc('C'+row,r.dest+(r.notes?' — '+r.notes:''));
       const km=r.roundTripKm||parseInt(r.km)||0;
       if(km>0)sc('I'+row,km,'n');
