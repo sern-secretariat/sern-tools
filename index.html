@@ -761,6 +761,16 @@ function generate(){
   toast("\u23f3 Generating Excel...");
 }
 
+// Convert YYYY-MM-DD string to Excel serial date number
+function dateToExcel(s){
+  if(!s)return null;
+  const [y,m,d]=s.split('-').map(Number);
+  if(!y||!m||!d)return null;
+  const epoch=new Date(1899,11,30);
+  const dt=new Date(y,m-1,d);
+  return Math.round((dt-epoch)/(86400000));
+}
+
 function buildExcel(emp,valid,total,catT){
   const XLSX=window.XLSX;
   const useKM=emp.km&&ST.kmApproved&&valid.some(r=>r.km&&parseInt(r.km)>0);
@@ -800,7 +810,8 @@ function buildExcel(emp,valid,total,catT){
 
   valid.forEach((row,i)=>{
     const r=12+i;
-    if(row.date)sc('B'+r,row.date);
+    const ds=dateToExcel(row.date);
+    if(ds){ws['B'+r]={v:ds,t:'n',z:'YYYY-MM-DD'};}
     sc('C'+r,row.desc||'');
     const amt=parseFloat(row.amt)||0;
     const col=CAT[row.cat]||'I';
@@ -957,12 +968,16 @@ function generateKM(){
     const wb=XLSX.read(TPL_KM,{type:'base64'});
     const ws=wb.Sheets['Travel Form'];
 
-    // Clear data rows 12-25
+    // Clear data rows 12-25 including formulas
     for(let r=12;r<=25;r++){
       ['B','C','D','E','F','G','H','I','J','K','L','M','N','O'].forEach(c=>{
-        const addr=c+r;
-        if(ws[addr]&&!ws[addr].f)delete ws[addr];
+        delete ws[c+r];
       });
+    }
+    // Restore formulas only for used rows
+    for(let r=12;r<12+valid.length;r++){
+      ws['J'+r]={f:'IF(I'+r+'>0,I'+r+'*$K$5,"")',t:'n'};
+      ws['O'+r]={f:'IFERROR(IF(D'+r+'+E'+r+'+F'+r+'+G'+r+'+H'+r+'+J'+r+'+K'+r+'+L'+r+'=0,"",D'+r+'+E'+r+'+F'+r+'+G'+r+'+H'+r+'+J'+r+'+K'+r+'+L'+r+'),"")' ,t:'n'};
     }
 
     const sc=(addr,v,t)=>{
@@ -978,7 +993,8 @@ function generateKM(){
 
     valid.forEach((r,i)=>{
       const row=12+i;
-      if(r.date)sc('B'+row,r.date);
+      const ds=dateToExcel(r.date);
+      if(ds){ws['B'+row]={v:ds,t:'n',z:'YYYY-MM-DD'};}
       sc('C'+row,r.dest+(r.notes?' — '+r.notes:''));
       const km=r.roundTripKm||parseInt(r.km)||0;
       if(km>0)sc('I'+row,km,'n');
