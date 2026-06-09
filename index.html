@@ -862,6 +862,7 @@ function rKM(){
   }).join("");
   const totalKm=ST.kmRows.reduce((s,r)=>s+(r.roundTripKm||parseInt(r.km)||0),0);
   const totalAmt=ST.kmRows.reduce((s,r)=>{
+    if(r.amount)return s+r.amount;
     const km=r.roundTripKm||parseInt(r.km)||0;
     const rate=r.rate||0.41;
     return s+km*rate;
@@ -937,7 +938,6 @@ function rKM(){
   document.getElementById("km-back").onclick=()=>{ST.step=-1;ST.kmRows=null;render()};
   document.getElementById("km-gen").onclick=generateKM;
 }
-
 function generateKM(){
   const valid=ST.kmRows.filter(r=>r.km&&parseInt(r.km)>0);
   if(!valid.length)return toast("⚠️ Add at least one trip with KM");
