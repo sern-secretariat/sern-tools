@@ -750,76 +750,198 @@ function r3(){
 function generate(){
   const emp=ST.emp;
   const valid=ST.rows.filter(r=>!r.isDup);
-  if(!valid.length)return toast("\u26a0\ufe0f No expense rows to export");
+  if(!valid.length)return toast("⚠️ No expense rows to export");
   const total=valid.reduce((s,r)=>s+(parseFloat(r.amt)||0),0);
   const catT=valid.reduce((a,r)=>{a[r.cat]=(a[r.cat]||0)+(parseFloat(r.amt)||0);return a},{});
+  if(window.ExcelJS){buildExcel(emp,valid,total,catT);return;}
   const script=document.createElement('script');
-  script.src='https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
+  script.src='https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.3.0/exceljs.min.js';
   script.onload=()=>buildExcel(emp,valid,total,catT);
-  script.onerror=()=>toast("\u26a0\ufe0f Could not load Excel library");
+  script.onerror=()=>toast("⚠️ Could not load Excel library");
   document.head.appendChild(script);
-  toast("\u23f3 Generating Excel...");
+  toast("⏳ Generating Excel...");
 }
 
 function buildExcel(emp,valid,total,catT){
-  const XLSX=window.XLSX;
   const useKM=emp.km&&ST.kmApproved&&valid.some(r=>r.km&&parseInt(r.km)>0);
-  const tplB64=useKM?TPL_KM:TPL_NO_KM;
-  const wb=XLSX.read(tplB64,{type:'base64',cellStyles:true});
-  const ws=wb.Sheets['Travel Form'];
+  const wb=new ExcelJS.Workbook();
+  const ws=wb.addWorksheet('Travel Form');
 
-  // Clear data rows 12-25
-  for(let r=12;r<=25;r++){
-    ['B','C','D','E','F','G','H','I','J','K','L','M','N','O'].forEach(c=>{
-      const addr=c+r;
-      if(ws[addr]&&!ws[addr].f)delete ws[addr]; // keep formulas
-    });
+  // Styles
+  const BLUE='1F4E79', WHITE='FFFFFFFF', LBLUE='EBF3FB', MBLUE='F5FAFF', GOLD='C9A84C';
+  const hdr=(bold,sz,color,bg)=>({font:{bold,size:sz,color:{argb:color||'FF000000'},name:'Calibri'},
+    fill:{type:'pattern',pattern:'solid',fgColor:{argb:bg||'00000000'}},
+    alignment:{vertical:'middle',wrapText:true},border:{
+      top:{style:'thin',color:{argb:'FFD0DBE8'}},bottom:{style:'thin',color:{argb:'FFD0DBE8'}},
+      left:{style:'thin',color:{argb:'FFD0DBE8'}},right:{style:'thin',color:{argb:'FFD0DBE8'}}}});
+  const sLabel=hdr(true,10,'FF'+BLUE,'FF'+LBLUE);
+  const sValue=hdr(false,10,'FF000000',WHITE);
+  const sHeaderCell=hdr(true,9,WHITE,'FF'+BLUE);
+  const sTitleCell={font:{bold:true,size:13,color:{argb:WHITE},name:'Calibri'},
+    fill:{type:'pattern',pattern:'solid',fgColor:{argb:'FF'+BLUE}},
+    alignment:{horizontal:'center',vertical:'middle',wrapText:true}};
+  const sTotalLabel={...hdr(true,10,WHITE,'FF'+BLUE),alignment:{horizontal:'center',vertical:'middle'}};
+  const sTotalVal={...hdr(true,10,WHITE,'FF'+BLUE),alignment:{horizontal:'right',vertical:'middle'}};
+  const sDataOdd=hdr(false,10,'FF000000',WHITE);
+  const sDataEven=hdr(false,10,'FF000000','FF'+MBLUE);
+  const sDataNum=(odd)=>({...odd?sDataOdd:sDataEven,alignment:{horizontal:'right',vertical:'middle'},numFmt:'#,##0.00 \u20ac'});
+  const sDataCtr=(odd)=>({...odd?sDataOdd:sDataEven,alignment:{horizontal:'center',vertical:'middle'}});
+  const sSig={font:{bold:true,size:10,color:{argb:'FF'+BLUE},name:'Calibri'},alignment:{vertical:'bottom'}};
+
+  // Column widths
+  if(useKM){
+    ws.columns=[{width:4},{width:12},{width:30},{width:13},{width:13},{width:13},{width:10},{width:13},{width:8},{width:12},{width:18},{width:10},{width:14},{width:22},{width:12}];
+  } else {
+    ws.columns=[{width:4},{width:12},{width:30},{width:13},{width:13},{width:13},{width:10},{width:13},{width:10},{width:14},{width:22},{width:12}];
   }
 
-  // Helper to set cell — preserves existing style (s) from template
-  const sc=(addr,v,t)=>{
-    if(!ws[addr])ws[addr]={};
-    ws[addr].v=v;
-    ws[addr].t=t||'s';
-    if(t==='n')ws[addr].z='#,##0.00 €';
-    delete ws[addr].w; // force SheetJS to re-format
-  };
+  // Row 1 spacer
+  ws.getRow(1).height=6;
 
-  // Header
-  sc('C4',emp.name);
-  sc('I4','Nicola Catellani');
-  if(useKM)sc('K4','Nicola Catellani');
-  sc('C5',ST.missionName);
-  sc('C6',ST.project||'');
-  const d1=ST.rows.filter(r=>r.date).map(r=>r.date).sort()[0]||'';
-  const d2=ST.rows.filter(r=>r.date).map(r=>r.date).sort().pop()||'';
-  sc('C7',d1+(d2&&d2!==d1?' – '+d2:''));
-  sc('C8',new Date().toISOString().slice(0,10));
+  // Row 2 - Title
+  ws.getRow(2).height=30;
+  const lastCol=useKM?'O':'L';
+  ws.mergeCells('B2:'+lastCol+'2');
+  const t=ws.getCell('B2');
+  t.value='SWEDEN EMILIA-ROMAGNA NETWORK \u2014 Travel & Mission Expense Report';
+  Object.assign(t,sTitleCell);
 
-  // Category → column (no-km vs km template)
-  const CAT_NO_KM={Flight:'D',Accommodation:'E','Train-bus-taxi':'F',Meals:'G',Fees:'H',Telepass:'I',Fuel:'I','Car rental':'I',Other:'I'};
-  const CAT_KM={Flight:'D',Accommodation:'E','Train-bus-taxi':'F',Meals:'G',Fees:'H',Telepass:'K',Fuel:'K','Car rental':'L',Other:'L'};
-  const CAT=useKM?CAT_KM:CAT_NO_KM;
+  // Row 3 spacer
+  ws.getRow(3).height=6;
 
-  valid.forEach((row,i)=>{
-    const r=12+i;
-    if(row.date)sc('B'+r,row.date);
-    sc('C'+r,row.desc||'');
-    const amt=parseFloat(row.amt)||0;
-    const col=CAT[row.cat]||'I';
-    if(amt>0)sc(col+r,amt,'n');
-    const km=parseInt(row.km)||0;
-    if(useKM&&km>0)sc('I'+r,km,'n');
-    const rcptCol=useKM?'M':'J';
-    const notesCol=useKM?'N':'K';
-    if(row.src)sc(rcptCol+r,row.src);
-    if(row.notes)sc(notesCol+r,row.notes||'');
+  const authCol=useKM?'J':'H';
+  const valAuthCol=useKM?'K':'I';
+  const mergeVal=useKM?'K4:N4':'I4:L4';
+  const mergeValKmRate=useKM?'K5:N5':'';
+  const mergeValTotal=useKM?'K6:N6':'I5:L5';
+  const mergeValKmTotal=useKM?'K7:N7':'';
+  const mergeC=useKM?'C':'C';
+
+  // Rows 4-8 header info
+  const rows48=[
+    [4,'Name',emp.name,'Authorised by','Nicola Catellani'],
+    [5,'Mission / trip',ST.missionName, useKM?'Amount per km (\u20ac)':null, useKM?'0.41':null],
+    [6,'Project',ST.project||'', useKM?'Total cost of mission (\u20ac)':'Total cost of mission (\u20ac)', useKM?{formula:'SUM(O12:O200)'}:{formula:'SUM(L12:L200)'}],
+    [7,'Period',(()=>{const d1=ST.rows.filter(r=>r.date).map(r=>r.date).sort()[0]||'';const d2=ST.rows.filter(r=>r.date).map(r=>r.date).sort().pop()||'';return d1+(d2&&d2!==d1?' \u2013 '+d2:'');})(), useKM?'Total KM reimbursement (\u20ac)':null, useKM?{formula:'SUM(J12:J200)'}:null],
+    [8,'Submission date',new Date().toISOString().slice(0,10), null, null],
+  ];
+
+  rows48.forEach(([rn,lbl,val,lbl2,val2])=>{
+    ws.getRow(rn).height=18;
+    const cL=ws.getCell('B'+rn); cL.value=lbl; Object.assign(cL,sLabel);
+    ws.mergeCells('C'+rn+':F'+rn);
+    const cV=ws.getCell('C'+rn); cV.value=val; Object.assign(cV,sValue);
+    if(lbl2){
+      const cL2=ws.getCell(authCol+rn); cL2.value=lbl2; Object.assign(cL2,sLabel);
+      if(useKM) ws.mergeCells(valAuthCol+rn+':N'+rn);
+      else ws.mergeCells('I'+rn+':L'+rn);
+      const cV2=ws.getCell(valAuthCol+rn);
+      cV2.value=val2; Object.assign(cV2,typeof val2==='object'?{...sValue,numFmt:'#,##0.00 \u20ac'}:sValue);
+    }
   });
 
-  // Filename
+  // Row 9 spacer
+  ws.getRow(9).height=4;
+
+  // Row 10 - Column headers
+  ws.getRow(10).height=31.5;
+  const hdrs=useKM
+    ?['Date','Description of expense','Flight ticket (\u20ac)','Accommodation (\u20ac)','Train / bus / taxi (\u20ac)','Meals (\u20ac)','Fees for events (\u20ac)','KM','Reimb. KM (\u20ac)','Telepass / tolls / parking (\u20ac)','Other (\u20ac)','Receipt ref.','Notes / justification','Total (\u20ac)']
+    :['Date','Description of expense','Flight ticket (\u20ac)','Accommodation (\u20ac)','Train / bus / taxi (\u20ac)','Meals (\u20ac)','Fees for events (\u20ac)','Other (\u20ac)','Receipt ref.','Notes / justification','Total (\u20ac)'];
+  const startCol=2; // B=2
+  hdrs.forEach((h,i)=>{
+    const cell=ws.getCell(10,startCol+i);
+    cell.value=h;
+    Object.assign(cell,sHeaderCell);
+  });
+
+  // Data rows 12-25
+  const CAT_NO_KM={Flight:4,Accommodation:5,'Train-bus-taxi':6,Meals:7,Fees:8,Telepass:9,Fuel:9,'Car rental':9,Other:9};
+  const CAT_KM={Flight:4,Accommodation:5,'Train-bus-taxi':6,Meals:7,Fees:8,Telepass:11,Fuel:11,'Car rental':12,Other:12};
+  const CAT=useKM?CAT_KM:CAT_NO_KM;
+  const totalCol=useKM?15:12; // O or L
+  const kmCol=useKM?9:null;   // I
+  const rcptCol=useKM?13:10;  // M or J
+  const notesCol=useKM?14:11; // N or K
+  const kmRateCol=useKM?10:null; // J
+
+  for(let ri=0;ri<=13;ri++){
+    const rn=12+ri;
+    ws.getRow(rn).height=18;
+    const odd=(ri%2===0);
+    const row=valid[ri];
+    const sD=odd?sDataOdd:sDataEven;
+    const sN=sDataNum(odd);
+    const sC=sDataCtr(odd);
+
+    // Fill all cells with alternating style first
+    const ncols=useKM?14:11;
+    for(let ci=0;ci<ncols;ci++){
+      const cell=ws.getCell(rn,startCol+ci);
+      Object.assign(cell,sD);
+      if(ci===0)Object.assign(cell,sC); // date center
+    }
+
+    if(row){
+      if(row.date){const c=ws.getCell('B'+rn);c.value=row.date;Object.assign(c,sC);}
+      ws.getCell('C'+rn).value=row.desc||'';
+      const amt=parseFloat(row.amt)||0;
+      const col=CAT[row.cat]||(useKM?12:9);
+      if(amt>0){const c=ws.getCell(rn,col);c.value=amt;Object.assign(c,sN);}
+      if(useKM&&parseInt(row.km)>0){const c=ws.getCell(rn,kmCol);c.value=parseInt(row.km);Object.assign(c,sC);}
+      // KM reimbursement formula
+      if(useKM&&kmRateCol){
+        const c=ws.getCell(rn,kmRateCol);
+        c.value={formula:'I'+rn+'*$K$5'};
+        Object.assign(c,sN);
+      }
+      if(row.src)ws.getCell(rn,rcptCol).value=row.src;
+      if(row.notes)ws.getCell(rn,notesCol).value=row.notes;
+      // Total formula
+      const c=ws.getCell(rn,totalCol);
+      const totFormula=useKM?'IFERROR(D'+rn+'+E'+rn+'+F'+rn+'+G'+rn+'+H'+rn+'+J'+rn+'+K'+rn+'+L'+rn+',"")':'IFERROR(D'+rn+'+E'+rn+'+F'+rn+'+G'+rn+'+H'+rn+'+I'+rn+',"")';
+      c.value={formula:totFormula};
+      Object.assign(c,sN);
+    } else {
+      // empty row total formula
+      const c=ws.getCell(rn,totalCol);
+      const totFormula=useKM?'IFERROR(D'+rn+'+E'+rn+'+F'+rn+'+G'+rn+'+H'+rn+'+J'+rn+'+K'+rn+'+L'+rn+',"")':'IFERROR(D'+rn+'+E'+rn+'+F'+rn+'+G'+rn+'+H'+rn+'+I'+rn+',"")';
+      c.value={formula:totFormula};
+      Object.assign(c,sN);
+      if(useKM){const c2=ws.getCell(rn,kmRateCol);c2.value={formula:'IF(I'+rn+'>0,I'+rn+'*$K$5,"")'};Object.assign(c2,sN);}
+    }
+  }
+
+  // Row 26 spacer
+  ws.getRow(26).height=4;
+
+  // Row 27 - TOTAL row
+  ws.getRow(27).height=19.5;
+  const tL=ws.getCell('B27'); tL.value='TOTAL'; Object.assign(tL,sTotalLabel);
+  const totCols=useKM?[4,5,6,7,8,10,11,12,15]:[4,5,6,7,8,9,12];
+  totCols.forEach(ci=>{
+    const colLetter=String.fromCharCode(64+ci);
+    const endR=useKM?25:25;
+    const c=ws.getCell(27,ci);
+    c.value={formula:'SUM('+colLetter+'12:'+colLetter+endR+')'};
+    Object.assign(c,{...sTotalVal,numFmt:'#,##0.00 \u20ac'});
+  });
+
+  // Row 30 - Signatures
+  ws.getRow(30).height=18;
+  const s1=ws.getCell('B30'); s1.value='Signature (submitter)'; Object.assign(s1,sSig);
+  const s2=ws.getCell(useKM?'H30':'H30'); s2.value='Signature (authoriser)'; Object.assign(s2,sSig);
+
+  // Download
   const filename=(ST.auth||'expense')+'_'+emp.name.split(' ').pop()+'_expenses.xlsx';
-  XLSX.writeFile(wb,filename,{cellStyles:true});
-  toast('✅ Excel downloaded: '+filename);
+  wb.xlsx.writeBuffer().then(buf=>{
+    const blob=new Blob([buf],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+    const a=document.createElement('a');
+    a.href=URL.createObjectURL(blob);
+    a.download=filename;
+    a.click();
+    toast('\u2705 Excel downloaded: '+filename);
+  });
 }
 
 async function calcDistance(dest, empId){
@@ -949,51 +1071,112 @@ function generateKM(){
   const monthName=month?new Date(parseInt(year),parseInt(month)-1,1).toLocaleString("en-GB",{month:"long",year:"numeric"}):"";
   const totalKm=valid.reduce((s,r)=>s+(r.roundTripKm||parseInt(r.km)||0),0);
   const totalAmt=(totalKm*0.41).toFixed(2);
-  const script=document.createElement('script');
-  script.src='https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
-  script.onload=()=>{
-    const XLSX=window.XLSX;
-    const wb=XLSX.read(TPL_KM,{type:'base64',cellStyles:true});
-    const ws=wb.Sheets['Travel Form'];
+  const doKM=()=>{
+    const wb=new ExcelJS.Workbook();
+    const ws=wb.addWorksheet('Travel Form');
 
-    // Clear data rows 12-25
-    for(let r=12;r<=25;r++){
-      ['B','C','D','E','F','G','H','I','J','K','L','M','N','O'].forEach(c=>{
-        const addr=c+r;
-        if(ws[addr]&&!ws[addr].f)delete ws[addr];
-      });
-    }
+    const BLUE='1F4E79', WHITE='FFFFFFFF', LBLUE='EBF3FB', MBLUE='F5FAFF';
+    const hdr=(bold,sz,color,bg)=>({font:{bold,size:sz,color:{argb:color||'FF000000'},name:'Calibri'},
+      fill:{type:'pattern',pattern:'solid',fgColor:{argb:bg||'00000000'}},
+      alignment:{vertical:'middle',wrapText:true},border:{
+        top:{style:'thin',color:{argb:'FFD0DBE8'}},bottom:{style:'thin',color:{argb:'FFD0DBE8'}},
+        left:{style:'thin',color:{argb:'FFD0DBE8'}},right:{style:'thin',color:{argb:'FFD0DBE8'}}}});
+    const sLabel=hdr(true,10,'FF'+BLUE,'FF'+LBLUE);
+    const sValue=hdr(false,10,'FF000000',WHITE);
+    const sHeaderCell=hdr(true,9,WHITE,'FF'+BLUE);
+    const sTitleCell={font:{bold:true,size:13,color:{argb:WHITE},name:'Calibri'},
+      fill:{type:'pattern',pattern:'solid',fgColor:{argb:'FF'+BLUE}},
+      alignment:{horizontal:'center',vertical:'middle',wrapText:true}};
+    const sTotalVal={...hdr(true,10,WHITE,'FF'+BLUE),alignment:{horizontal:'right',vertical:'middle'}};
+    const sTotalLabel={...hdr(true,10,WHITE,'FF'+BLUE),alignment:{horizontal:'center',vertical:'middle'}};
+    const sDataOdd=hdr(false,10,'FF000000',WHITE);
+    const sDataEven=hdr(false,10,'FF000000','FF'+MBLUE);
+    const sN=(odd)=>({...odd?sDataOdd:sDataEven,alignment:{horizontal:'right',vertical:'middle'},numFmt:'#,##0.00 €'});
+    const sC=(odd)=>({...odd?sDataOdd:sDataEven,alignment:{horizontal:'center',vertical:'middle'}});
+    const sSig={font:{bold:true,size:10,color:{argb:'FF'+BLUE},name:'Calibri'},alignment:{vertical:'bottom'}};
 
-    // Helper to set cell — preserves existing style (s) from template
-    const sc=(addr,v,t)=>{
-      if(!ws[addr])ws[addr]={};
-      ws[addr].v=v;
-      ws[addr].t=t||'s';
-      if(t==='n')ws[addr].z='#,##0.00 €';
-      delete ws[addr].w; // force SheetJS to re-format
-    };
+    ws.columns=[{width:4},{width:12},{width:30},{width:13},{width:13},{width:13},{width:10},{width:13},{width:8},{width:12},{width:18},{width:10},{width:14},{width:22},{width:12}];
 
-    sc('C4','Nicola Catellani');
-    sc('K4','Nicola Catellani');
-    sc('C5',ST.auth+' — '+monthName);
-    sc('C6','');
-    sc('C7',monthName);
-    sc('C8',new Date().toISOString().slice(0,10));
+    ws.getRow(1).height=6;
+    ws.getRow(2).height=30;
+    ws.mergeCells('B2:O2');
+    const t=ws.getCell('B2');
+    t.value='SWEDEN EMILIA-ROMAGNA NETWORK — Travel & Mission Expense Report';
+    Object.assign(t,sTitleCell);
+    ws.getRow(3).height=6;
 
-    valid.forEach((r,i)=>{
-      const row=12+i;
-      if(r.date)sc('B'+row,r.date);
-      sc('C'+row,r.dest+(r.notes?' — '+r.notes:''));
-      const km=r.roundTripKm||parseInt(r.km)||0;
-      if(km>0)sc('I'+row,km,'n');
-      const tp=parseFloat(r.telepass)||0;
-      if(tp>0)sc('K'+row,tp,'n');
+    const infos=[
+      [4,'Name','Nicola Catellani','Authorised by','Nicola Catellani'],
+      [5,'Mission / trip',ST.auth+' — '+monthName,'Amount per km (€)','0.41'],
+      [6,'Project','','Total cost of mission (€)',{formula:'SUM(O12:O200)'}],
+      [7,'Period',monthName,'Total KM reimbursement (€)',{formula:'SUM(J12:J200)'}],
+      [8,'Submission date',new Date().toISOString().slice(0,10),null,null],
+    ];
+    infos.forEach(([rn,lbl,val,lbl2,val2])=>{
+      ws.getRow(rn).height=18;
+      const cL=ws.getCell('B'+rn); cL.value=lbl; Object.assign(cL,sLabel);
+      ws.mergeCells('C'+rn+':F'+rn);
+      const cV=ws.getCell('C'+rn); cV.value=val; Object.assign(cV,sValue);
+      if(lbl2){
+        const cL2=ws.getCell('J'+rn); cL2.value=lbl2; Object.assign(cL2,sLabel);
+        ws.mergeCells('K'+rn+':N'+rn);
+        const cV2=ws.getCell('K'+rn);
+        cV2.value=val2; Object.assign(cV2,typeof val2==='object'?{...sValue,numFmt:'#,##0.00 €'}:sValue);
+      }
     });
 
+    ws.getRow(9).height=4;
+    ws.getRow(10).height=31.5;
+    ['Date','Description of expense','Flight ticket (€)','Accommodation (€)','Train / bus / taxi (€)','Meals (€)','Fees for events (€)','KM','Reimb. KM (€)','Telepass / tolls / parking (€)','Other (€)','Receipt ref.','Notes / justification','Total (€)'].forEach((h,i)=>{
+      const cell=ws.getCell(10,2+i); cell.value=h; Object.assign(cell,sHeaderCell);
+    });
+
+    for(let ri=0;ri<=13;ri++){
+      const rn=12+ri;
+      ws.getRow(rn).height=18;
+      const odd=(ri%2===0);
+      const r=valid[ri];
+      for(let ci=0;ci<14;ci++) Object.assign(ws.getCell(rn,2+ci),odd?sDataOdd:sDataEven);
+      if(r){
+        if(r.date){const c=ws.getCell('B'+rn);c.value=r.date;Object.assign(c,sC(odd));}
+        ws.getCell('C'+rn).value=r.dest+(r.notes?' — '+r.notes:'');
+        const km=r.roundTripKm||parseInt(r.km)||0;
+        if(km>0){const c=ws.getCell('I'+rn);c.value=km;Object.assign(c,sC(odd));}
+        const c=ws.getCell('J'+rn);c.value={formula:'I'+rn+'*$K$5'};Object.assign(c,sN(odd));
+        const tp=parseFloat(r.telepass)||0;
+        if(tp>0){const c2=ws.getCell('K'+rn);c2.value=tp;Object.assign(c2,sN(odd));}
+      } else {
+        const c=ws.getCell('J'+rn);c.value={formula:'IF(I'+rn+'>0,I'+rn+'*$K$5,"")'};Object.assign(c,sN(odd));
+      }
+      const tc=ws.getCell('O'+rn);
+      tc.value={formula:'IFERROR(D'+rn+'+E'+rn+'+F'+rn+'+G'+rn+'+H'+rn+'+J'+rn+'+K'+rn+'+L'+rn+',"")'}; Object.assign(tc,sN(odd));
+    }
+
+    ws.getRow(26).height=4;
+    ws.getRow(27).height=19.5;
+    const tL=ws.getCell('B27'); tL.value='TOTAL'; Object.assign(tL,sTotalLabel);
+    [4,5,6,7,8,10,11,12,15].forEach(ci=>{
+      const col=String.fromCharCode(64+ci);
+      const c=ws.getCell(27,ci);
+      c.value={formula:'SUM('+col+'12:'+col+'25)'};
+      Object.assign(c,{...sTotalVal,numFmt:'#,##0.00 €'});
+    });
+
+    ws.getRow(30).height=18;
+    Object.assign(ws.getCell('B30'),sSig); ws.getCell('B30').value='Signature (submitter)';
+    Object.assign(ws.getCell('H30'),sSig); ws.getCell('H30').value='Signature (authoriser)';
+
     const filename=ST.auth+'_mileage_report.xlsx';
-    XLSX.writeFile(wb,filename,{cellStyles:true});
-    toast('✅ KM Report downloaded: '+filename);
+    wb.xlsx.writeBuffer().then(buf=>{
+      const blob=new Blob([buf],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+      const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=filename; a.click();
+      toast('✅ KM Report downloaded: '+filename);
+    });
   };
+  if(window.ExcelJS){doKM();return;}
+  const script=document.createElement('script');
+  script.src='https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.3.0/exceljs.min.js';
+  script.onload=doKM;
   script.onerror=()=>toast("⚠️ Could not load Excel library");
   document.head.appendChild(script);
   toast("⏳ Generating KM Report...");
