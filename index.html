@@ -847,16 +847,15 @@ function rKM(){
     const amtLabel=r.amount?(" = <strong>€"+r.amount.toFixed(2)+"</strong>"):"";
     const calcStatus=r.calculating?"⏳ Calculating...":r.destName?('<span style="font-size:11px;color:#2E7D32">'+rateLabel+' · '+r.roundTripKm+'km RT'+amtLabel+'</span>'):"";
     return '<div style="background:#F7F9FC;border:1.5px solid #E8EEF5;border-radius:8px;padding:10px;margin-bottom:8px">'
-      +'<div style="display:grid;grid-template-columns:120px 1fr 70px 30px;gap:6px;margin-bottom:6px;align-items:center">'
-        +'<input type="date" value="'+r.date+'" data-i="'+i+'" data-f="date" style="padding:8px;border:1.5px solid #E8EEF5;border-radius:6px;font-size:13px;font-family:sans-serif;outline:none;background:#fff">'
-        +'<input type="text" placeholder="Destination (e.g. Parma)" value="'+r.dest+'" data-i="'+i+'" data-f="dest" style="padding:8px;border:1.5px solid #E8EEF5;border-radius:6px;font-size:13px;font-family:sans-serif;outline:none;background:#fff">'
-        +'<input type="number" placeholder="KM" value="'+(r.roundTripKm||r.km||'')+'" data-i="'+i+'" data-f="km" style="padding:8px;border:1.5px solid #E8EEF5;border-radius:6px;font-size:13px;font-family:sans-serif;outline:none;background:#fff">'
+      +'<div style="display:grid;grid-template-columns:120px 1fr 1fr 70px 30px;gap:6px;margin-bottom:6px;align-items:center">'
+        +'<input type="date" value="'+r.date+'" data-i="'+i+'" data-f="date" style="padding:8px;border:1.5px solid #E8EEF5;border-radius:6px;font-size:12px;font-family:sans-serif;outline:none;background:#fff">'
+        +'<input type="text" placeholder="Notes / purpose" value="'+r.notes+'" data-i="'+i+'" data-f="notes" style="padding:8px;border:1.5px solid #E8EEF5;border-radius:6px;font-size:12px;font-family:sans-serif;outline:none;background:#fff">'
+        +'<input type="text" placeholder="Destination" value="'+r.dest+'" data-i="'+i+'" data-f="dest" style="padding:8px;border:1.5px solid #E8EEF5;border-radius:6px;font-size:12px;font-family:sans-serif;outline:none;background:#fff">'
+        +'<input type="number" placeholder="KM" value="'+(r.roundTripKm||r.km||'')+'" data-i="'+i+'" data-f="km" style="padding:8px;border:1.5px solid #E8EEF5;border-radius:6px;font-size:12px;font-family:sans-serif;outline:none;background:#fff;text-align:center">'
         +'<button data-del="'+i+'" style="width:28px;height:28px;background:#FEE2E2;border:none;border-radius:6px;cursor:pointer;font-size:14px;color:#DC2626">×</button>'
       +'</div>'
-      +'<div style="display:grid;grid-template-columns:1fr auto;gap:6px;align-items:center">'
-        +'<input type="text" placeholder="Notes / purpose" value="'+r.notes+'" data-i="'+i+'" data-f="notes" style="padding:7px 10px;border:1.5px solid #E8EEF5;border-radius:6px;font-size:12px;font-family:sans-serif;outline:none;background:#fff">'
-        +'<button data-calc="'+i+'" style="padding:7px 12px;background:#1F4E79;color:#fff;border:none;border-radius:6px;font-size:12px;cursor:pointer;font-family:sans-serif;white-space:nowrap">📍 Calc KM</button>'
-      +'</div>'
+      +'<div style="display:flex;gap:6px;align-items:center;justify-content:space-between">'
+        +'<button data-calc="'+i+'" style="padding:6px 14px;background:#1F4E79;color:#fff;border:none;border-radius:6px;font-size:12px;cursor:pointer;font-family:sans-serif;white-space:nowrap">📍 Calc KM</button>'
       +(calcStatus?'<div style="margin-top:6px;font-size:12px;font-family:sans-serif">'+calcStatus+'</div>':"")
     +'</div>';
   }).join("");
@@ -871,11 +870,11 @@ function rKM(){
     '<div class="sec-title">Monthly KM Reimbursement</div>'
     +'<div class="sec-sub">'+ST.auth+(monthName?" — "+monthName:"")+'</div>'
     +'<div style="background:#fff;border:1.5px solid #E8EEF5;border-radius:10px;padding:14px;margin-bottom:14px">'
-      +'<div style="display:grid;grid-template-columns:120px 1fr 70px auto 30px;gap:6px;margin-bottom:8px">'
+      +'<div style="display:grid;grid-template-columns:120px 1fr 1fr 70px 30px;gap:6px;margin-bottom:8px">'
         +'<div style="font-size:11px;font-weight:700;color:#4A6880;font-family:sans-serif;text-transform:uppercase">Date</div>'
+        +'<div style="font-size:11px;font-weight:700;color:#4A6880;font-family:sans-serif;text-transform:uppercase">Notes / Purpose</div>'
         +'<div style="font-size:11px;font-weight:700;color:#4A6880;font-family:sans-serif;text-transform:uppercase">Destination</div>'
-        +'<div style="font-size:11px;font-weight:700;color:#4A6880;font-family:sans-serif;text-transform:uppercase">KM</div>'
-        +'<div style="font-size:11px;font-weight:700;color:#4A6880;font-family:sans-serif;text-transform:uppercase">Notes</div>'
+        +'<div style="font-size:11px;font-weight:700;color:#4A6880;font-family:sans-serif;text-transform:uppercase">KM RT</div>'
         +'<div></div>'
       +'</div>'
       +rowsHtml
@@ -938,6 +937,7 @@ function rKM(){
   document.getElementById("km-back").onclick=()=>{ST.step=-1;ST.kmRows=null;render()};
   document.getElementById("km-gen").onclick=generateKM;
 }
+
 function generateKM(){
   const valid=ST.kmRows.filter(r=>r.km&&parseInt(r.km)>0);
   if(!valid.length)return toast("⚠️ Add at least one trip with KM");
