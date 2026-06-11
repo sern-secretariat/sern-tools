@@ -764,7 +764,7 @@ function buildExcel(emp,valid,total,catT){
   const XLSX=window.XLSX;
   const useKM=emp.km&&ST.kmApproved&&valid.some(r=>r.km&&parseInt(r.km)>0);
   const tplB64=useKM?TPL_KM:TPL_NO_KM;
-  const wb=XLSX.read(tplB64,{type:'base64'});
+  const wb=XLSX.read(tplB64,{type:'base64',cellStyles:true});
   const ws=wb.Sheets['Travel Form'];
 
   // Save cell styles before clearing (SheetJS stores style index in .s)
@@ -831,7 +831,7 @@ function buildExcel(emp,valid,total,catT){
 
   // Filename
   const filename=(ST.auth||'expense')+'_'+emp.name.split(' ').pop()+'_expenses.xlsx';
-  XLSX.writeFile(wb,filename);
+  XLSX.writeFile(wb,filename,{cellStyles:true});
   toast('✅ Excel downloaded: '+filename);
 }
 
@@ -966,12 +966,22 @@ function generateKM(){
   script.src='https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
   script.onload=()=>{
     const XLSX=window.XLSX;
-    const wb=XLSX.read(TPL_KM,{type:'base64'});
+    const wb=XLSX.read(TPL_KM,{type:'base64',cellStyles:true});
     const ws=wb.Sheets['Travel Form'];
+
+    // Save cell styles before clearing
+    const KM_COLS=['B','C','D','E','F','G','H','I','J','K','L','M','N','O'];
+    const savedS={};
+    KM_COLS.forEach(c=>{
+      for(let r=12;r<=25;r++){
+        const a=c+r;
+        if(ws[a]&&ws[a].s!==undefined)savedS[a]=ws[a].s;
+      }
+    });
 
     // Clear data rows 12-25
     for(let r=12;r<=25;r++){
-      ['B','C','D','E','F','G','H','I','J','K','L','M','N','O'].forEach(c=>{
+      KM_COLS.forEach(c=>{
         const addr=c+r;
         if(ws[addr]&&!ws[addr].f)delete ws[addr];
       });
@@ -981,6 +991,10 @@ function generateKM(){
       if(!ws[addr])ws[addr]={};
       ws[addr].v=v;ws[addr].t=t||'s';
       if(t==='n')ws[addr].z='#,##0.00 €';
+      const rn=parseInt(addr.replace(/[A-Z]/g,''));
+      const cl=addr.replace(/[0-9]/g,'');
+      const s=savedS[addr]!==undefined?savedS[addr]:savedS[cl+(rn%2===0?12:13)];
+      if(s!==undefined)ws[addr].s=s;
     };
 
     sc('C4',ST.emp.name);
@@ -1001,7 +1015,7 @@ function generateKM(){
     });
 
     const filename=ST.auth+'_mileage_report.xlsx';
-    XLSX.writeFile(wb,filename);
+    XLSX.writeFile(wb,filename,{cellStyles:true});
     toast('✅ KM Report downloaded: '+filename);
   };
   script.onerror=()=>toast("⚠️ Could not load Excel library");
