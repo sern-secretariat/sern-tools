@@ -767,19 +767,35 @@ function buildExcel(emp,valid,total,catT){
   const wb=XLSX.read(tplB64,{type:'base64'});
   const ws=wb.Sheets['Travel Form'];
 
+  // Save cell styles before clearing (SheetJS stores style index in .s)
+  const DATA_COLS=['B','C','D','E','F','G','H','I','J','K','L','M','N','O'];
+  const savedS={};
+  DATA_COLS.forEach(c=>{
+    for(let r=12;r<=25;r++){
+      const a=c+r;
+      if(ws[a]&&ws[a].s!==undefined)savedS[a]=ws[a].s;
+    }
+  });
+
   // Clear data rows 12-25
   for(let r=12;r<=25;r++){
-    ['B','C','D','E','F','G','H','I','J','K','L','M','N','O'].forEach(c=>{
+    DATA_COLS.forEach(c=>{
       const addr=c+r;
       if(ws[addr]&&!ws[addr].f)delete ws[addr]; // keep formulas
     });
   }
 
-  // Helper to set cell
+  // Helper to set cell — restores template row-stripe style
   const sc=(addr,v,t)=>{
     if(!ws[addr])ws[addr]={};
     ws[addr].v=v;ws[addr].t=t||'s';
     if(t==='n')ws[addr].z='#,##0.00 €';
+    // Restore style: use saved style for this exact cell, or fall back to
+    // same column in row 12 (even) / row 13 (odd) for the stripe pattern
+    const rn=parseInt(addr.replace(/[A-Z]/g,''));
+    const cl=addr.replace(/[0-9]/g,'');
+    const s=savedS[addr]!==undefined?savedS[addr]:savedS[cl+(rn%2===0?12:13)];
+    if(s!==undefined)ws[addr].s=s;
   };
 
   // Header
