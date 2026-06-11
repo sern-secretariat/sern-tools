@@ -121,6 +121,7 @@ const EMP=[
   {id:"federica",name:"Federica", base:"Sorbolo PR",       card:"soldo_federica", km:true,  tpl:"KM"},
   {id:"alessia", name:"Alessia",  base:"—",                card:"",               km:false, tpl:"Standard"},
   {id:"nanna",   name:"Nanna",    base:"—",                card:"soldo_nanna",    km:false, tpl:"Standard"},
+  {id:"sofia",   name:"Sofia",    base:"—",                card:"",               km:false, tpl:"Standard"},
 ];
 const PROJECTS=["ACCREDITATION 24-25","ACCREDITATION 25-26","BRIDGE 26","FOOD4FUTURE 26","INTEC 26","RETHINK 26","STEAM 26","STRADE FUTURE 26","TRANSMICVET 26"];
 const CATS=["Meals","Flight","Accommodation","Train-bus-taxi","Car rental","Fuel","Telepass","Fees","Other"];
@@ -209,6 +210,54 @@ async function parseReceipt(file){
   const data=await res.json();
   if(data.error)throw new Error(data.error);
   return data;
+}
+
+async function parseCardStatement(file){
+  const isPdf=file.type==="application/pdf";
+  if(!isPdf)return [];
+  const b64=await fileToB64(file);
+  const res=await fetch(WORKER_URL,{
+    method:"POST",
+    headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({action:"parseCardStatement",fileData:b64,mediaType:file.type})
+  });
+  const data=await res.json();
+  if(data.error||!Array.isArray(data.transactions))return [];
+  return data.transactions; // [{date:"YYYY-MM-DD", amtEur:12.34}, ...]
+}
+
+function matchCardStatement(rows,cardTxns){
+  if(!cardTxns||cardTxns.length===0)return rows;
+  // Build index: date string -> array of amtEur values (multiple txns same day possible)
+  const idx={};
+  cardTxns.forEach(t=>{
+    if(!t.date||!t.amtEur)return;
+    (idx[t.date]=idx[t.date]||[]).push({amtEur:parseFloat(t.amtEur),used:false});
+  });
+  // Helper: find closest date within ±1 day
+  function findMatch(date,amtOrig){
+    if(!date)return null;
+    const d=new Date(date);
+    for(let delta=-1;delta<=1;delta++){
+      const nd=new Date(d);nd.setDate(nd.getDate()+delta);
+      const key=nd.toISOString().slice(0,10);
+      const bucket=idx[key];
+      if(!bucket)continue;
+      // Find an unused entry in this bucket
+      const entry=bucket.find(e=>!e.used);
+      if(entry){entry.used=true;return entry.amtEur;}
+    }
+    return null;
+  }
+  return rows.map(r=>{
+    if((r.origCur||"EUR")==="EUR")return r; // already EUR, skip
+    const eurAmt=findMatch(r.date,r.amt);
+    if(eurAmt!==null){
+      return {...r,amt:eurAmt,cardMatched:true,cardUnmatched:false};
+    }else{
+      return {...r,cardUnmatched:true,cardMatched:false};
+    }
+  });
 }
 
 function render(){
@@ -420,7 +469,7 @@ async function submitRequest(){
 
   const payload={
     employee:ST.emp.name,
-    email:ST.emp.id==="nicola"?"nicola.catellani@sern.eu":ST.emp.id==="nanna"?"nanna.mikkelsen@sern.eu":ST.emp.id+".sern@sern.eu",
+    email:ST.emp.id==="nicola"?"nicola.catellani@sern.eu":ST.emp.id+".sern@sern.eu",
     missionName:ST.missionName,
     dateFrom:ST.dateFrom,
     dateTo:ST.dateTo,
@@ -619,8 +668,25 @@ async function processFiles(){
       });
     }
   }
-  const final=dupCheck(newRows);
-  ST.rows=final;ST.expanded=Object.fromEntries(final.filter(r=>r.isDup).map(r=>[r.id,true]));
+  // If a card statement was uploaded, parse it and match EUR amounts to non-EUR rows
+  const cardFile=ST.files.find(f=>f.role==="card");
+  if(cardFile){
+    ST.procMsg="Parsing card statement for EUR conversion…";r2();
+    try{
+      const cardTxns=await parseCardStatement(cardFile.file);
+      ST.cardTxns=cardTxns;
+      const matched=matchCardStatement(newRows,cardTxns);
+      const final=dupCheck(matched);
+      ST.rows=final;ST.expanded=Object.fromEntries(final.filter(r=>r.isDup).map(r=>[r.id,true]));
+    }catch(e){
+      console.error("Card statement parse error:",e.message);
+      const final=dupCheck(newRows);
+      ST.rows=final;ST.expanded=Object.fromEntries(final.filter(r=>r.isDup).map(r=>[r.id,true]));
+    }
+  }else{
+    const final=dupCheck(newRows);
+    ST.rows=final;ST.expanded=Object.fromEntries(final.filter(r=>r.isDup).map(r=>[r.id,true]));
+  }
   ST.proc=false;ST.step=3;render();
 }
 
@@ -691,6 +757,12 @@ function r3(){
     const over300Warn=(parseFloat(row.amt)||0)>=300
       ?'<div style="padding:8px 12px;border-radius:6px;font-size:12px;background:#FFF3E0;color:#E65100;border-left:3px solid #E65100;font-family:sans-serif">⚠️ Single expense ≥ €300 — attach at least 2 written quotes</div>'
       :'';
+    const curMatchBadge=row.cardMatched
+      ?'<span style="font-size:10px;background:#E8F5E9;color:#2E7D32;border-radius:4px;padding:2px 6px;font-family:sans-serif;white-space:nowrap">💱 EUR from statement</span>'
+      :'';
+    const curWarn=row.cardUnmatched
+      ?'<div style="padding:8px 12px;border-radius:6px;font-size:12px;background:#FFF3E0;color:#E65100;border-left:3px solid #E65100;font-family:sans-serif">⚠️ Amount is in <strong>'+(row.origCur||'non-EUR')+'</strong> — no matching EUR entry found in card statement. Please enter the EUR amount manually.</div>'
+      :'';
     const dupWarn=row.isDup
       ?'<div class="alert-warn" style="margin:0">⚠️ Possible duplicate — same date &amp; amount as another row</div>'
       :'';
@@ -710,6 +782,7 @@ function r3(){
           +'<input type="number" step="0.01" value="'+row.amt+'" data-id="'+row.id+'" data-f="amt"></div>'
         +kmField
         +over300Warn
+        +curWarn
         +dupWarn
         +'<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:2px">'
           +keepBtn
@@ -722,6 +795,7 @@ function r3(){
         +'<div class="row-num">'+(idx+1)+'</div>'
         +'<div class="row-summary">'+(row.date||'?')+' · '+(row.desc||'No description')+'</div>'
         +dupTag
+        +curMatchBadge
         +'<div class="row-amt">€'+(parseFloat(row.amt)||0).toFixed(2)+'</div>'
         +'<span style="color:#9AAFC5;font-size:11px;flex-shrink:0;font-family:sans-serif">'+(open?'▲':'▼')+'</span>'
       +'</div>'
@@ -760,16 +834,6 @@ function generate(){
   toast("\u23f3 Generating Excel...");
 }
 
-// Convert YYYY-MM-DD string to Excel serial date number
-function dateToExcel(s){
-  if(!s)return null;
-  const [y,m,d]=s.split('-').map(Number);
-  if(!y||!m||!d)return null;
-  const epoch=new Date(1899,11,30);
-  const dt=new Date(y,m-1,d);
-  return Math.round((dt-epoch)/(86400000));
-}
-
 function buildExcel(emp,valid,total,catT){
   const XLSX=window.XLSX;
   const useKM=emp.km&&ST.kmApproved&&valid.some(r=>r.km&&parseInt(r.km)>0);
@@ -787,7 +851,8 @@ function buildExcel(emp,valid,total,catT){
 
   // Helper to set cell
   const sc=(addr,v,t)=>{
-    ws[addr]={v:v,t:t||'s'};
+    if(!ws[addr])ws[addr]={};
+    ws[addr].v=v;ws[addr].t=t||'s';
     if(t==='n')ws[addr].z='#,##0.00 €';
   };
 
@@ -809,8 +874,7 @@ function buildExcel(emp,valid,total,catT){
 
   valid.forEach((row,i)=>{
     const r=12+i;
-    const ds=dateToExcel(row.date);
-    if(ds){ws['B'+r]={v:ds,t:'n',z:'YYYY-MM-DD'};}
+    if(row.date)sc('B'+r,row.date);
     sc('C'+r,row.desc||'');
     const amt=parseFloat(row.amt)||0;
     const col=CAT[row.cat]||'I';
@@ -845,10 +909,8 @@ async function calcDistance(dest, empId){
 function rKM(){
   const c=document.getElementById("content");
   const parts=ST.auth.split("-");
-  let year, month;
-  if(parts[1]&&parts[1].length===4){year=parts[1];month=parts[2];}
-  else{month=parts[1];year=parts[2];}
-  year=year||"2026";month=month||"";
+  const year=parts[1]||"2026";
+  const month=parts[2]||"";
   const monthName=month?new Date(parseInt(year),parseInt(month)-1,1).toLocaleString("en-GB",{month:"long",year:"numeric"}):"";
   if(!ST.kmRows)ST.kmRows=[{id:1,date:"",dest:"",km:"",notes:""}];
   const rowsHtml=ST.kmRows.map((r,i)=>{
@@ -953,11 +1015,9 @@ function generateKM(){
   const valid=ST.kmRows.filter(r=>(r.roundTripKm&&r.roundTripKm>0)||(r.km&&parseInt(r.km)>0));
   if(!valid.length)return toast("⚠️ Add at least one trip with KM");
   const parts=ST.auth.split("-");
-  // Support both KM-2026-06-NICOLA and KM-06-2026-NICOLA
-  let year, month;
-  if(parts[1]&&parts[1].length===4){year=parts[1];month=parts[2];}
-  else{month=parts[1];year=parts[2];}
-  const monthName=(month&&year)?new Date(parseInt(year),parseInt(month)-1,1).toLocaleString("en-GB",{month:"long",year:"numeric"}):"";
+  const year=parts[1]||"2026";
+  const month=parts[2]||"";
+  const monthName=month?new Date(parseInt(year),parseInt(month)-1,1).toLocaleString("en-GB",{month:"long",year:"numeric"}):"";
   const totalKm=valid.reduce((s,r)=>s+(r.roundTripKm||parseInt(r.km)||0),0);
   const totalAmt=(totalKm*0.41).toFixed(2);
   const script=document.createElement('script');
@@ -967,22 +1027,20 @@ function generateKM(){
     const wb=XLSX.read(TPL_KM,{type:'base64'});
     const ws=wb.Sheets['Travel Form'];
 
-    // Clear data rows 12-25 including formulas
+    // Clear data rows 12-25
     for(let r=12;r<=25;r++){
       ['B','C','D','E','F','G','H','I','J','K','L','M','N','O'].forEach(c=>{
-        delete ws[c+r];
+        const addr=c+r;
+        if(ws[addr]&&!ws[addr].f)delete ws[addr];
       });
-    }
-    // Restore formulas only for used rows
-    for(let r=12;r<12+valid.length;r++){
-      ws['J'+r]={f:'IF(I'+r+'>0,I'+r+'*$K$5,"")',t:'n'};
-      ws['O'+r]={f:'IFERROR(IF(D'+r+'+E'+r+'+F'+r+'+G'+r+'+H'+r+'+J'+r+'+K'+r+'+L'+r+'=0,"",D'+r+'+E'+r+'+F'+r+'+G'+r+'+H'+r+'+J'+r+'+K'+r+'+L'+r+'),"")' ,t:'n'};
     }
 
     const sc=(addr,v,t)=>{
-      ws[addr]={v:v,t:t||'s'};
-      if(t==='n'){ws[addr].z='#,##0.00 €';}
+      if(!ws[addr])ws[addr]={};
+      ws[addr].v=v;ws[addr].t=t||'s';
+      if(t==='n')ws[addr].z='#,##0.00 €';
     };
+
     sc('C4','Nicola Catellani');
     sc('K4','Nicola Catellani');
     sc('C5',ST.auth+' — '+monthName);
@@ -992,8 +1050,7 @@ function generateKM(){
 
     valid.forEach((r,i)=>{
       const row=12+i;
-      const ds=dateToExcel(r.date);
-      if(ds){ws['B'+row]={v:ds,t:'n',z:'YYYY-MM-DD'};}
+      if(r.date)sc('B'+row,r.date);
       sc('C'+row,r.dest+(r.notes?' — '+r.notes:''));
       const km=r.roundTripKm||parseInt(r.km)||0;
       if(km>0)sc('I'+row,km,'n');
