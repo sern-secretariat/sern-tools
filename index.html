@@ -829,6 +829,12 @@ function buildExcel(emp,valid,total,catT){
     if(row.notes)sc(notesCol+r,row.notes||'');
   });
 
+  // Clear cached 0 from formula cells in unused rows so they appear blank
+  for(let r=12+valid.length;r<=25;r++){
+    const lAddr='L'+r;
+    if(ws[lAddr]&&ws[lAddr].f){ws[lAddr].v='';ws[lAddr].t='s';}
+  }
+
   // Filename
   const filename=(ST.auth||'expense')+'_'+emp.name.split(' ').pop()+'_expenses.xlsx';
   XLSX.writeFile(wb,filename,{cellStyles:true});
@@ -1013,6 +1019,13 @@ function generateKM(){
       const tp=parseFloat(r.telepass)||0;
       if(tp>0)sc('K'+row,tp,'n');
     });
+
+    // Clear cached 0 from formula cells in unused rows
+    for(let r=12+valid.length;r<=25;r++){
+      ['L','J','M'].forEach(c=>{
+        if(ws[c+r]&&ws[c+r].f){ws[c+r].v='';ws[c+r].t='s';}
+      });
+    }
 
     const filename=ST.auth+'_mileage_report.xlsx';
     XLSX.writeFile(wb,filename,{cellStyles:true});
