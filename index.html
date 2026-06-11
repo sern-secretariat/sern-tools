@@ -778,15 +778,16 @@ async function buildExcel(emp,valid,total,catT){
 
   // Fix row-total formula: blank instead of 0 for empty rows
   xml=xml.replace(/IFERROR\((D(\d+)\+E\2\+F\2\+G\2\+H\2\+I\2),&quot;&quot;\)/g,'IF($1=0,&quot;&quot;,$1)');
+  // Fix I5: SUM(L12:L200) double-counts L27 (which is SUM of same rows) → use SUM(L12:L26)
+  xml=xml.replace(/(<c r="I5"[^>]*>)<f[^>]*>SUM\(L12:L200\)<\/f><v>[^<]*<\/v>/,'$1<f aca="false">SUM(L12:L26)</f><v>0</v>');
 
   // Header cells
   putStr('C4',emp.name);
   putStr(useKM?'K4':'I4','Nicola Catellani');
   putStr('C5',ST.missionName);
   if(ST.project)putStr('C6',ST.project);
-  const d1=ST.rows.filter(r=>r.date).map(r=>r.date).sort()[0]||'';
-  const d2=ST.rows.filter(r=>r.date).map(r=>r.date).sort().pop()||'';
-  putStr('C7',d1+(d2&&d2!==d1?' – '+d2:''));
+  const period=ST.dateFrom+(ST.dateTo&&ST.dateTo!==ST.dateFrom?' – '+ST.dateTo:'');
+  putStr('C7',period);
   putStr('C8',new Date().toISOString().slice(0,10));
   if(!useKM)patchV('I5',total);
 
