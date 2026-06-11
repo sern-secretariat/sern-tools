@@ -115,13 +115,12 @@ const BASE_ADDRESSES={
 };
 
 const EMP=[
-  {id:"nicola",  name:"Nicola",   base:"Reggio Emilia",    card:"unicredit_2139", km:true,  tpl:"KM"},
-  {id:"ginevra", name:"Ginevra",  base:"Scandiano RE",     card:"soldo_ginevra",  km:true,  tpl:"KM"},
-  {id:"laura",   name:"Laura",    base:"Casalmaggiore MN", card:"soldo_laura",    km:true,  tpl:"KM"},
-  {id:"federica",name:"Federica", base:"Sorbolo PR",       card:"soldo_federica", km:true,  tpl:"KM"},
-  {id:"alessia", name:"Alessia",  base:"—",                card:"",               km:false, tpl:"Standard"},
-  {id:"nanna",   name:"Nanna",    base:"—",                card:"soldo_nanna",    km:false, tpl:"Standard"},
-  {id:"sofia",   name:"Sofia",    base:"—",                card:"",               km:false, tpl:"Standard"},
+  {id:"nicola",  name:"Nicola Catellani",        email:"nicola.catellani@sern.eu",          base:"Reggio Emilia",    card:"unicredit_2139", km:true,  tpl:"KM"},
+  {id:"ginevra", name:"Ginevra Roli",             email:"ginevra.roli@sern.eu",              base:"Scandiano RE",     card:"soldo_ginevra",  km:true,  tpl:"KM"},
+  {id:"laura",   name:"Laura Avanzi",             email:"laura.avanzi@sern.eu",              base:"Casalmaggiore MN", card:"soldo_laura",    km:true,  tpl:"KM"},
+  {id:"federica",name:"Federica Gravina",         email:"federica.gravina@sern.eu",          base:"Sorbolo PR",       card:"soldo_federica", km:true,  tpl:"KM"},
+  {id:"alessia", name:"Alessia Mereu",            email:"alessia.mereu@sern.eu",             base:"—",           card:"",               km:false, tpl:"Standard"},
+  {id:"nanna",   name:"Nanna Mikkelsen",            email:"nanna.mikkelsen@sern.eu"     ,  base:"—",           card:"soldo_nanna",    km:false, tpl:"Standard"},
 ];
 const PROJECTS=["ACCREDITATION 24-25","ACCREDITATION 25-26","BRIDGE 26","FOOD4FUTURE 26","INTEC 26","RETHINK 26","STEAM 26","STRADE FUTURE 26","TRANSMICVET 26"];
 const CATS=["Meals","Flight","Accommodation","Train-bus-taxi","Car rental","Fuel","Telepass","Fees","Other"];
@@ -210,54 +209,6 @@ async function parseReceipt(file){
   const data=await res.json();
   if(data.error)throw new Error(data.error);
   return data;
-}
-
-async function parseCardStatement(file){
-  const isPdf=file.type==="application/pdf";
-  if(!isPdf)return [];
-  const b64=await fileToB64(file);
-  const res=await fetch(WORKER_URL,{
-    method:"POST",
-    headers:{"Content-Type":"application/json"},
-    body:JSON.stringify({action:"parseCardStatement",fileData:b64,mediaType:file.type})
-  });
-  const data=await res.json();
-  if(data.error||!Array.isArray(data.transactions))return [];
-  return data.transactions; // [{date:"YYYY-MM-DD", amtEur:12.34}, ...]
-}
-
-function matchCardStatement(rows,cardTxns){
-  if(!cardTxns||cardTxns.length===0)return rows;
-  // Build index: date string -> array of amtEur values (multiple txns same day possible)
-  const idx={};
-  cardTxns.forEach(t=>{
-    if(!t.date||!t.amtEur)return;
-    (idx[t.date]=idx[t.date]||[]).push({amtEur:parseFloat(t.amtEur),used:false});
-  });
-  // Helper: find closest date within ±1 day
-  function findMatch(date,amtOrig){
-    if(!date)return null;
-    const d=new Date(date);
-    for(let delta=-1;delta<=1;delta++){
-      const nd=new Date(d);nd.setDate(nd.getDate()+delta);
-      const key=nd.toISOString().slice(0,10);
-      const bucket=idx[key];
-      if(!bucket)continue;
-      // Find an unused entry in this bucket
-      const entry=bucket.find(e=>!e.used);
-      if(entry){entry.used=true;return entry.amtEur;}
-    }
-    return null;
-  }
-  return rows.map(r=>{
-    if((r.origCur||"EUR")==="EUR")return r; // already EUR, skip
-    const eurAmt=findMatch(r.date,r.amt);
-    if(eurAmt!==null){
-      return {...r,amt:eurAmt,cardMatched:true,cardUnmatched:false};
-    }else{
-      return {...r,cardUnmatched:true,cardMatched:false};
-    }
-  });
 }
 
 function render(){
@@ -351,7 +302,7 @@ function r0(){
         +'<div style="font-size:32px;margin-bottom:10px">✅</div>'
         +'<div class="s-label">Request submitted</div>'
         +'<div class="s-val" style="font-size:16px;margin:6px 0">'+ST.missionName+'</div>'
-        +'<div style="font-size:13px;color:#A8C8E8;margin-top:8px;font-family:sans-serif">Nicola will review your request in Teams.<br>You will receive an email with your authorization code.</div>'
+        +'<div style="font-size:13px;color:#A8C8E8;margin-top:8px;font-family:sans-serif">Your request has been sent to Nicola for review in Teams.<br>'+ST.emp.name+' will receive an email with the authorization code.</div>'
       +'</div>'
       +'<div class="alert-info"><span>ℹ️</span><span style="font-family:sans-serif;font-size:13px">Once approved, return to the home screen and enter your authorization code to submit expenses.</span></div>';
     document.getElementById("footer").innerHTML=
@@ -469,7 +420,7 @@ async function submitRequest(){
 
   const payload={
     employee:ST.emp.name,
-    email:ST.emp.id==="nicola"?"nicola.catellani@sern.eu":ST.emp.id+".sern@sern.eu",
+    email:ST.emp.email,
     missionName:ST.missionName,
     dateFrom:ST.dateFrom,
     dateTo:ST.dateTo,
@@ -668,25 +619,8 @@ async function processFiles(){
       });
     }
   }
-  // If a card statement was uploaded, parse it and match EUR amounts to non-EUR rows
-  const cardFile=ST.files.find(f=>f.role==="card");
-  if(cardFile){
-    ST.procMsg="Parsing card statement for EUR conversion…";r2();
-    try{
-      const cardTxns=await parseCardStatement(cardFile.file);
-      ST.cardTxns=cardTxns;
-      const matched=matchCardStatement(newRows,cardTxns);
-      const final=dupCheck(matched);
-      ST.rows=final;ST.expanded=Object.fromEntries(final.filter(r=>r.isDup).map(r=>[r.id,true]));
-    }catch(e){
-      console.error("Card statement parse error:",e.message);
-      const final=dupCheck(newRows);
-      ST.rows=final;ST.expanded=Object.fromEntries(final.filter(r=>r.isDup).map(r=>[r.id,true]));
-    }
-  }else{
-    const final=dupCheck(newRows);
-    ST.rows=final;ST.expanded=Object.fromEntries(final.filter(r=>r.isDup).map(r=>[r.id,true]));
-  }
+  const final=dupCheck(newRows);
+  ST.rows=final;ST.expanded=Object.fromEntries(final.filter(r=>r.isDup).map(r=>[r.id,true]));
   ST.proc=false;ST.step=3;render();
 }
 
@@ -757,12 +691,6 @@ function r3(){
     const over300Warn=(parseFloat(row.amt)||0)>=300
       ?'<div style="padding:8px 12px;border-radius:6px;font-size:12px;background:#FFF3E0;color:#E65100;border-left:3px solid #E65100;font-family:sans-serif">⚠️ Single expense ≥ €300 — attach at least 2 written quotes</div>'
       :'';
-    const curMatchBadge=row.cardMatched
-      ?'<span style="font-size:10px;background:#E8F5E9;color:#2E7D32;border-radius:4px;padding:2px 6px;font-family:sans-serif;white-space:nowrap">💱 EUR from statement</span>'
-      :'';
-    const curWarn=row.cardUnmatched
-      ?'<div style="padding:8px 12px;border-radius:6px;font-size:12px;background:#FFF3E0;color:#E65100;border-left:3px solid #E65100;font-family:sans-serif">⚠️ Amount is in <strong>'+(row.origCur||'non-EUR')+'</strong> — no matching EUR entry found in card statement. Please enter the EUR amount manually.</div>'
-      :'';
     const dupWarn=row.isDup
       ?'<div class="alert-warn" style="margin:0">⚠️ Possible duplicate — same date &amp; amount as another row</div>'
       :'';
@@ -782,7 +710,6 @@ function r3(){
           +'<input type="number" step="0.01" value="'+row.amt+'" data-id="'+row.id+'" data-f="amt"></div>'
         +kmField
         +over300Warn
-        +curWarn
         +dupWarn
         +'<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:2px">'
           +keepBtn
@@ -795,7 +722,6 @@ function r3(){
         +'<div class="row-num">'+(idx+1)+'</div>'
         +'<div class="row-summary">'+(row.date||'?')+' · '+(row.desc||'No description')+'</div>'
         +dupTag
-        +curMatchBadge
         +'<div class="row-amt">€'+(parseFloat(row.amt)||0).toFixed(2)+'</div>'
         +'<span style="color:#9AAFC5;font-size:11px;flex-shrink:0;font-family:sans-serif">'+(open?'▲':'▼')+'</span>'
       +'</div>'
@@ -1041,8 +967,8 @@ function generateKM(){
       if(t==='n')ws[addr].z='#,##0.00 €';
     };
 
-    sc('C4','Nicola Catellani');
-    sc('K4','Nicola Catellani');
+    sc('C4',ST.emp.name);
+    sc('K4',ST.emp.name);
     sc('C5',ST.auth+' — '+monthName);
     sc('C6','');
     sc('C7',monthName);
