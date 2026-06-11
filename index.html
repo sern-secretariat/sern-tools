@@ -752,93 +752,106 @@ function generate(){
   if(!valid.length)return toast("\u26a0\ufe0f No expense rows to export");
   const total=valid.reduce((s,r)=>s+(parseFloat(r.amt)||0),0);
   const catT=valid.reduce((a,r)=>{a[r.cat]=(a[r.cat]||0)+(parseFloat(r.amt)||0);return a},{});
+  toast('\u23f3 Generating Excel...');
+  if(window.JSZip){buildExcel(emp,valid,total,catT);return;}
   const script=document.createElement('script');
-  script.src='https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
+  script.src='https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js';
   script.onload=()=>buildExcel(emp,valid,total,catT);
-  script.onerror=()=>toast("\u26a0\ufe0f Could not load Excel library");
+  script.onerror=()=>toast('\u26a0\ufe0f Could not load JSZip');
   document.head.appendChild(script);
-  toast("\u23f3 Generating Excel...");
 }
 
-function buildExcel(emp,valid,total,catT){
-  const XLSX=window.XLSX;
+async function buildExcel(emp,valid,total,catT){
+  try{
   const useKM=emp.km&&ST.kmApproved&&valid.some(r=>r.km&&parseInt(r.km)>0);
   const tplB64=useKM?TPL_KM:TPL_NO_KM;
-  const wb=XLSX.read(tplB64,{type:'base64',cellStyles:true});
-  const ws=wb.Sheets['Travel Form'];
+  const bin=atob(tplB64);const bytes=new Uint8Array(bin.length);
+  for(let i=0;i<bin.length;i++)bytes[i]=bin.charCodeAt(i);
+  const zip=await JSZip.loadAsync(bytes);
+  let xml=await zip.file('xl/worksheets/sheet1.xml').async('string');
 
-  // Save cell styles before clearing (SheetJS stores style index in .s)
-  const DATA_COLS=['B','C','D','E','F','G','H','I','J','K','L','M','N','O'];
-  const savedS={};
-  DATA_COLS.forEach(c=>{
-    for(let r=12;r<=25;r++){
-      const a=c+r;
-      if(ws[a]&&ws[a].s!==undefined)savedS[a]=ws[a].s;
-    }
-  });
+  const X=s=>String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  const cRx=a=>new RegExp('<c r="'+a+'"(?:[^>]*/>[\\s]*|[^>]*>[\\s\\S]*?<\\/c>)');
+  const gS=a=>{const m=xml.match(new RegExp('<c r="'+a+'" s="(\\d+)"'));return m?m[1]:'4';};
+  const putStr=(a,v)=>{if(!v&&v!==0)return;xml=xml.replace(cRx(a),'<c r="'+a+'" s="'+gS(a)+'" t="inlineStr"><is><t>'+X(v)+'</t></is></c>');};
+  const patchV=(a,v)=>{xml=xml.replace(new RegExp('(<c r="'+a+'"[^>]*><f[^>]*>[^<]*<\\/f>)<v>[^<]*<\\/v>'),'$1<v>'+v+'</v>');};
 
-  // Clear data rows 12-25
-  for(let r=12;r<=25;r++){
-    DATA_COLS.forEach(c=>{
-      const addr=c+r;
-      if(ws[addr]&&!ws[addr].f)delete ws[addr]; // keep formulas
-    });
-  }
+  // Fix row-total formula: blank instead of 0 for empty rows
+  xml=xml.replace(/IFERROR\((D(\d+)\+E\2\+F\2\+G\2\+H\2\+I\2),&quot;&quot;\)/g,'IF($1=0,&quot;&quot;,$1)');
 
-  // Helper to set cell — restores template row-stripe style
-  const sc=(addr,v,t)=>{
-    if(!ws[addr])ws[addr]={};
-    ws[addr].v=v;ws[addr].t=t||'s';
-    if(t==='n')ws[addr].z='#,##0.00 €';
-    // Restore style: use saved style for this exact cell, or fall back to
-    // same column in row 12 (even) / row 13 (odd) for the stripe pattern
-    const rn=parseInt(addr.replace(/[A-Z]/g,''));
-    const cl=addr.replace(/[0-9]/g,'');
-    const s=savedS[addr]!==undefined?savedS[addr]:savedS[cl+(rn%2===0?12:13)];
-    if(s!==undefined)ws[addr].s=s;
-  };
-
-  // Header
-  sc('C4',emp.name);
-  sc('I4','Nicola Catellani');
-  if(useKM)sc('K4','Nicola Catellani');
-  sc('C5',ST.missionName);
-  sc('C6',ST.project||'');
+  // Header cells
+  putStr('C4',emp.name);
+  putStr(useKM?'K4':'I4','Nicola Catellani');
+  putStr('C5',ST.missionName);
+  if(ST.project)putStr('C6',ST.project);
   const d1=ST.rows.filter(r=>r.date).map(r=>r.date).sort()[0]||'';
   const d2=ST.rows.filter(r=>r.date).map(r=>r.date).sort().pop()||'';
-  sc('C7',d1+(d2&&d2!==d1?' – '+d2:''));
-  sc('C8',new Date().toISOString().slice(0,10));
+  putStr('C7',d1+(d2&&d2!==d1?' – '+d2:''));
+  putStr('C8',new Date().toISOString().slice(0,10));
+  if(!useKM)patchV('I5',total);
 
-  // Category → column (no-km vs km template)
+  // Style index maps: even rows / odd rows for each template
+  const ENK={B:'7',C:'8',D:'9',E:'9',F:'9',G:'9',H:'9',I:'9',J:'8',K:'8'};
+  const ONK={B:'11',C:'12',D:'13',E:'13',F:'13',G:'13',H:'13',I:'13',J:'12',K:'12'};
+  const EKM={B:'8',C:'9',D:'10',E:'10',F:'10',G:'10',H:'10',I:'11',J:'10',K:'10',L:'10',M:'9',N:'9'};
+  const OKM={B:'13',C:'14',D:'15',E:'15',F:'15',G:'15',H:'15',I:'16',J:'15',K:'15',L:'15',M:'14',N:'14'};
+
+  // KM template has stale data in rows 12–25 — clear before writing
+  if(useKM){
+    for(let r=12;r<=25;r++){
+      const S=r%2===0?EKM:OKM;
+      ['B','C','I','K','M','N'].forEach(c=>xml=xml.replace(cRx(c+r),'<c r="'+c+r+'" s="'+S[c]+'"/>'));
+      patchV('J'+r,'');
+    }
+  }
+
   const CAT_NO_KM={Flight:'D',Accommodation:'E','Train-bus-taxi':'F',Meals:'G',Fees:'H',Telepass:'I',Fuel:'I','Car rental':'I',Other:'I'};
   const CAT_KM={Flight:'D',Accommodation:'E','Train-bus-taxi':'F',Meals:'G',Fees:'H',Telepass:'K',Fuel:'K','Car rental':'L',Other:'L'};
   const CAT=useKM?CAT_KM:CAT_NO_KM;
+  const catSums={D:0,E:0,F:0,G:0,H:0,I:0};
 
   valid.forEach((row,i)=>{
     const r=12+i;
-    if(row.date)sc('B'+r,row.date);
-    sc('C'+r,row.desc||'');
+    const S=r%2===0?(useKM?EKM:ENK):(useKM?OKM:ONK);
     const amt=parseFloat(row.amt)||0;
     const col=CAT[row.cat]||'I';
-    if(amt>0)sc(col+r,amt,'n');
-    const km=parseInt(row.km)||0;
-    if(useKM&&km>0)sc('I'+r,km,'n');
     const rcptCol=useKM?'M':'J';
     const notesCol=useKM?'N':'K';
-    if(row.src)sc(rcptCol+r,row.src);
-    if(row.notes)sc(notesCol+r,row.notes||'');
+    if(row.date)xml=xml.replace(cRx('B'+r),'<c r="B'+r+'" s="'+S.B+'" t="inlineStr"><is><t>'+X(row.date)+'</t></is></c>');
+    xml=xml.replace(cRx('C'+r),'<c r="C'+r+'" s="'+S.C+'" t="inlineStr"><is><t>'+X(row.desc||'')+'</t></is></c>');
+    if(!useKM){
+      if(amt>0){xml=xml.replace(cRx(col+r),'<c r="'+col+r+'" s="'+(S[col]||S.I)+'" t="n"><v>'+amt+'</v></c>');catSums[col]=(catSums[col]||0)+amt;}
+      if(row.src)xml=xml.replace(cRx(rcptCol+r),'<c r="'+rcptCol+r+'" s="'+S[rcptCol]+'" t="inlineStr"><is><t>'+X(row.src)+'</t></is></c>');
+      if(row.notes)xml=xml.replace(cRx(notesCol+r),'<c r="'+notesCol+r+'" s="'+S[notesCol]+'" t="inlineStr"><is><t>'+X(row.notes)+'</t></is></c>');
+      patchV('L'+r,amt);
+    } else {
+      const km=parseInt(row.km)||0;
+      if(km>0)xml=xml.replace(cRx('I'+r),'<c r="I'+r+'" s="'+S.I+'" t="n"><v>'+km+'</v></c>');
+      const tp=parseFloat(row.telepass)||0;
+      if(tp>0)xml=xml.replace(cRx('K'+r),'<c r="K'+r+'" s="'+S.K+'" t="n"><v>'+tp+'</v></c>');
+      if(row.src)xml=xml.replace(cRx('M'+r),'<c r="M'+r+'" s="'+S.M+'" t="inlineStr"><is><t>'+X(row.src)+'</t></is></c>');
+      if(row.notes)xml=xml.replace(cRx('N'+r),'<c r="N'+r+'" s="'+S.N+'" t="inlineStr"><is><t>'+X(row.notes)+'</t></is></c>');
+      patchV('J'+r,parseFloat((km*0.41).toFixed(2)));
+    }
   });
 
-  // Clear cached 0 from formula cells in unused rows so they appear blank
-  for(let r=12+valid.length;r<=25;r++){
-    const lAddr='L'+r;
-    if(ws[lAddr]&&ws[lAddr].f){ws[lAddr].v='';ws[lAddr].t='s';}
+  if(!useKM){
+    // Clear cached values for unused rows (prevents 0,00 € display)
+    for(let r=12+valid.length;r<=25;r++)patchV('L'+r,'');
+    // Update TOTAL row cached values
+    ['D','E','F','G','H','I'].forEach(c=>patchV(c+'27',catSums[c]||0));
+    patchV('L27',total);
   }
 
-  // Filename
   const filename=(ST.auth||'expense')+'_'+emp.name.split(' ').pop()+'_expenses.xlsx';
-  XLSX.writeFile(wb,filename,{cellStyles:true});
+  zip.file('xl/worksheets/sheet1.xml',xml);
+  const blob=await zip.generateAsync({type:'blob',compression:'DEFLATE',compressionOptions:{level:6}});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');a.href=url;a.download=filename;
+  document.body.appendChild(a);a.click();document.body.removeChild(a);
+  setTimeout(()=>URL.revokeObjectURL(url),1000);
   toast('✅ Excel downloaded: '+filename);
+  }catch(e){toast('⚠️ Excel error: '+e.message);console.error(e);}
 }
 
 async function calcDistance(dest, empId){
@@ -968,72 +981,68 @@ function generateKM(){
   const monthName=month?new Date(parseInt(year),parseInt(month)-1,1).toLocaleString("en-GB",{month:"long",year:"numeric"}):"";
   const totalKm=valid.reduce((s,r)=>s+(r.roundTripKm||parseInt(r.km)||0),0);
   const totalAmt=(totalKm*0.41).toFixed(2);
+  toast('⏳ Generating KM Report...');
+  if(window.JSZip){buildKMExcel(valid,year,month,monthName,totalKm,totalAmt);return;}
   const script=document.createElement('script');
-  script.src='https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
-  script.onload=()=>{
-    const XLSX=window.XLSX;
-    const wb=XLSX.read(TPL_KM,{type:'base64',cellStyles:true});
-    const ws=wb.Sheets['Travel Form'];
-
-    // Save cell styles before clearing
-    const KM_COLS=['B','C','D','E','F','G','H','I','J','K','L','M','N','O'];
-    const savedS={};
-    KM_COLS.forEach(c=>{
-      for(let r=12;r<=25;r++){
-        const a=c+r;
-        if(ws[a]&&ws[a].s!==undefined)savedS[a]=ws[a].s;
-      }
-    });
-
-    // Clear data rows 12-25
-    for(let r=12;r<=25;r++){
-      KM_COLS.forEach(c=>{
-        const addr=c+r;
-        if(ws[addr]&&!ws[addr].f)delete ws[addr];
-      });
-    }
-
-    const sc=(addr,v,t)=>{
-      if(!ws[addr])ws[addr]={};
-      ws[addr].v=v;ws[addr].t=t||'s';
-      if(t==='n')ws[addr].z='#,##0.00 €';
-      const rn=parseInt(addr.replace(/[A-Z]/g,''));
-      const cl=addr.replace(/[0-9]/g,'');
-      const s=savedS[addr]!==undefined?savedS[addr]:savedS[cl+(rn%2===0?12:13)];
-      if(s!==undefined)ws[addr].s=s;
-    };
-
-    sc('C4',ST.emp.name);
-    sc('K4',ST.emp.name);
-    sc('C5',ST.auth+' — '+monthName);
-    sc('C6','');
-    sc('C7',monthName);
-    sc('C8',new Date().toISOString().slice(0,10));
-
-    valid.forEach((r,i)=>{
-      const row=12+i;
-      if(r.date)sc('B'+row,r.date);
-      sc('C'+row,r.dest+(r.notes?' — '+r.notes:''));
-      const km=r.roundTripKm||parseInt(r.km)||0;
-      if(km>0)sc('I'+row,km,'n');
-      const tp=parseFloat(r.telepass)||0;
-      if(tp>0)sc('K'+row,tp,'n');
-    });
-
-    // Clear cached 0 from formula cells in unused rows
-    for(let r=12+valid.length;r<=25;r++){
-      ['L','J','M'].forEach(c=>{
-        if(ws[c+r]&&ws[c+r].f){ws[c+r].v='';ws[c+r].t='s';}
-      });
-    }
-
-    const filename=ST.auth+'_mileage_report.xlsx';
-    XLSX.writeFile(wb,filename,{cellStyles:true});
-    toast('✅ KM Report downloaded: '+filename);
-  };
-  script.onerror=()=>toast("⚠️ Could not load Excel library");
+  script.src='https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js';
+  script.onload=()=>buildKMExcel(valid,year,month,monthName,totalKm,totalAmt);
+  script.onerror=()=>toast('⚠️ Could not load JSZip');
   document.head.appendChild(script);
-  toast("⏳ Generating KM Report...");
+}
+
+async function buildKMExcel(valid,year,month,monthName,totalKm,totalAmt){
+  try{
+  const bin=atob(TPL_KM);const bytes=new Uint8Array(bin.length);
+  for(let i=0;i<bin.length;i++)bytes[i]=bin.charCodeAt(i);
+  const zip=await JSZip.loadAsync(bytes);
+  let xml=await zip.file('xl/worksheets/sheet1.xml').async('string');
+
+  const X=s=>String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  const cRx=a=>new RegExp('<c r="'+a+'"(?:[^>]*/>[\\s]*|[^>]*>[\\s\\S]*?<\\/c>)');
+  const gS=a=>{const m=xml.match(new RegExp('<c r="'+a+'" s="(\\d+)"'));return m?m[1]:'4';};
+  const putStr=(a,v)=>{if(!v&&v!==0)return;xml=xml.replace(cRx(a),'<c r="'+a+'" s="'+gS(a)+'" t="inlineStr"><is><t>'+X(v)+'</t></is></c>');};
+  const patchV=(a,v)=>{xml=xml.replace(new RegExp('(<c r="'+a+'"[^>]*><f[^>]*>[^<]*<\\/f>)<v>[^<]*<\\/v>'),'$1<v>'+v+'</v>');};
+  const EKM={B:'8',C:'9',D:'10',E:'10',F:'10',G:'10',H:'10',I:'11',J:'10',K:'10',L:'10',M:'9',N:'9'};
+  const OKM={B:'13',C:'14',D:'15',E:'15',F:'15',G:'15',H:'15',I:'16',J:'15',K:'15',L:'15',M:'14',N:'14'};
+
+  // Clear stale template data in rows 12–25
+  for(let r=12;r<=25;r++){
+    const S=r%2===0?EKM:OKM;
+    ['B','C','I','K','M','N'].forEach(c=>xml=xml.replace(cRx(c+r),'<c r="'+c+r+'" s="'+S[c]+'"/>'));
+    patchV('J'+r,'');
+  }
+
+  putStr('C4',ST.emp.name);
+  putStr('K4',ST.emp.name);
+  putStr('C5',ST.auth+' — '+monthName);
+  putStr('C7',monthName);
+  putStr('C8',new Date().toISOString().slice(0,10));
+
+  valid.forEach((r,i)=>{
+    const row=12+i;
+    const S=row%2===0?EKM:OKM;
+    const km=r.roundTripKm||parseInt(r.km)||0;
+    const tp=parseFloat(r.telepass)||0;
+    if(r.date)xml=xml.replace(cRx('B'+row),'<c r="B'+row+'" s="'+S.B+'" t="inlineStr"><is><t>'+X(r.date)+'</t></is></c>');
+    xml=xml.replace(cRx('C'+row),'<c r="C'+row+'" s="'+S.C+'" t="inlineStr"><is><t>'+X(r.dest+(r.notes?' — '+r.notes:''))+'</t></is></c>');
+    if(km>0)xml=xml.replace(cRx('I'+row),'<c r="I'+row+'" s="'+S.I+'" t="n"><v>'+km+'</v></c>');
+    if(tp>0)xml=xml.replace(cRx('K'+row),'<c r="K'+row+'" s="'+S.K+'" t="n"><v>'+tp+'</v></c>');
+    patchV('J'+row,parseFloat((km*0.41).toFixed(2)));
+  });
+
+  // Update formula caches for KM totals
+  patchV('K6',parseFloat(totalAmt));
+  patchV('K7',valid.reduce((s,r)=>s+(parseFloat(r.telepass)||0),0));
+
+  const filename=ST.auth+'_mileage_report.xlsx';
+  zip.file('xl/worksheets/sheet1.xml',xml);
+  const blob=await zip.generateAsync({type:'blob',compression:'DEFLATE',compressionOptions:{level:6}});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');a.href=url;a.download=filename;
+  document.body.appendChild(a);a.click();document.body.removeChild(a);
+  setTimeout(()=>URL.revokeObjectURL(url),1000);
+  toast('✅ KM Report downloaded: '+filename);
+  }catch(e){toast('⚠️ KM Excel error: '+e.message);console.error(e);}
 }
 
 
