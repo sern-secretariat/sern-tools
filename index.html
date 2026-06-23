@@ -150,6 +150,13 @@ let ST={
   carUse:false,
   carReason:"",
   estimatedCost:"",
+  programmeDays:0,
+  travelDays:0,
+  travelExceptions:[],   // [{date,condition,justification,altDescription,altCost}] max 2
+  costJustified:false,
+  costJustification:"",
+  costAltDescription:"",
+  costAltCost:"",
   missionRef:"",
   requestSent:false,
   // Step 1+
@@ -170,6 +177,16 @@ function detectRole(name,card){
   return"receipt";
 }
 
+
+// Returns true if mission allowance applies
+function allowanceApplies(emp,destCountry){
+  if(!destCountry||destCountry==="Italy")return false;
+  if(emp&&emp.id==="nanna"&&destCountry==="Sweden")return false;
+  return true;
+}
+function calcAllowance(pd,td){
+  return{full:77.47,half:38.74,total:Math.round(((pd*77.47)+(td*38.74))*100)/100};
+}
 function catFromText(t){
   const s=(t||"").toLowerCase();
   if(/food|cibo|pasto|ristoran|trattoria|pizz|bar|caf|lunch|dinner|breakfast|colaz|pranzo|cena|snack|meal/.test(s))return"Meals";
@@ -374,14 +391,71 @@ function r0(){
         +'<option value="Other"'+(ST.destCountry==="Other"?" selected":"")+'>🌍 Other</option>'
       +'</select></div>'
       +(ST.destCountry==="Italy"
-        ?'<div style="margin-top:6px;font-size:12px;color:#4A6880;font-family:sans-serif;background:#D6E4F0;padding:7px 10px;border-radius:5px">ℹ️ Mission allowance (€77.47/day) does not apply to missions in Italy</div>'
+        ?'<div style="margin-top:6px;font-size:12px;color:#4A6880;font-family:sans-serif;background:#D6E4F0;padding:7px 10px;border-radius:5px">ℹ️ Mission allowance does not apply to missions in Italy</div>'
         :(ST.emp&&ST.emp.id==="nanna"&&ST.destCountry==="Sweden"
           ?'<div style="margin-top:6px;font-size:12px;color:#4A6880;font-family:sans-serif;background:#D6E4F0;padding:7px 10px;border-radius:5px">ℹ️ Mission allowance does not apply for Nanna on Sweden missions</div>'
-          :(ST.destCountry&&ST.destCountry!=="Italy"
-            ?'<div style="margin-top:6px;font-size:12px;color:#2E7D32;font-family:sans-serif;background:#E8F5E9;padding:7px 10px;border-radius:5px">✓ Mission allowance (€77.47/day) applies for multi-day missions</div>'
+          :(ST.destCountry
+            ?'<div style="margin-top:6px;font-size:12px;color:#2E7D32;font-family:sans-serif;background:#E8F5E9;padding:7px 10px;border-radius:5px">✓ Mission allowance applies — indicate programme and travel days below</div>'
             :''))
       )
     +'</div>'
+    +(allowanceApplies(ST.emp,ST.destCountry)
+      ?'<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px">'
+        +'<div><label class="lbl">Programme days <span class="req">*</span></label>'
+          +'<input type="number" id="f-pd" min="0" value="'+(ST.programmeDays||0)+'" style="width:100%;padding:10px 12px;border:1.5px solid #E8EEF5;border-radius:6px;font-family:sans-serif;font-size:14px;color:#1A2E42;background:#fff;outline:none;box-sizing:border-box">'
+          +'<div style="font-size:11px;color:#4A6880;font-family:sans-serif;margin-top:3px">Days with programme activities</div>'
+        +'</div>'
+        +'<div><label class="lbl">Travel days <span class="req">*</span></label>'
+          +'<input type="number" id="f-td" min="0" value="'+(ST.travelDays||0)+'" style="width:100%;padding:10px 12px;border:1.5px solid #E8EEF5;border-radius:6px;font-family:sans-serif;font-size:14px;color:#1A2E42;background:#fff;outline:none;box-sizing:border-box">'
+          +'<div style="font-size:11px;color:#4A6880;font-family:sans-serif;margin-top:3px">Days spent travelling only (half allowance)</div>'
+        +'</div>'
+      +'</div>'
+      :''
+    )
+    +(allowanceApplies(ST.emp,ST.destCountry)&&ST.travelDays>0
+      ?(()=>{
+          const exs=ST.travelExceptions||[];
+          const condOpts=c=>'<option value=""'+(c===''?' selected':'')+'>— Select —</option>'
+            +'<option value="12h"'+(c==='12h'?' selected':'')+'>More than 12 hours travel</option>'
+            +'<option value="21h"'+(c==='21h'?' selected':'')+'>Arrives/departs after 21:00</option>'
+            +'<option value="both"'+(c==='both'?' selected':'')+'>Both conditions</option>';
+          const exRows=exs.map((ex,i)=>
+            '<div style="background:#fff;border:1px solid #D6E4F0;border-radius:7px;padding:10px 12px;margin-bottom:8px">'
+              +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">'
+                +'<span style="font-size:12px;font-weight:600;color:#1F4E79;font-family:sans-serif">Exception day '+(i+1)+'</span>'
+                +'<button data-ex-del="'+i+'" style="border:none;background:none;color:#C62828;font-size:14px;cursor:pointer;padding:0">✕</button>'
+              +'</div>'
+              +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">'
+                +'<div><label style="font-size:11px;color:#4A6880;font-family:sans-serif;display:block;margin-bottom:3px">Date</label>'
+                  +'<input type="date" data-ex="'+i+'" data-f="date" value="'+(ex.date||'')+'" style="width:100%;padding:8px 10px;border:1px solid #E8EEF5;border-radius:5px;font-family:sans-serif;font-size:13px;color:#1A2E42;background:#fff;outline:none;box-sizing:border-box"></div>'
+                +'<div><label style="font-size:11px;color:#4A6880;font-family:sans-serif;display:block;margin-bottom:3px">Condition</label>'
+                  +'<select data-ex="'+i+'" data-f="condition" style="width:100%;padding:8px 10px;border:1px solid #E8EEF5;border-radius:5px;font-family:sans-serif;font-size:13px;color:#1A2E42;background:#fff;outline:none;box-sizing:border-box">'+condOpts(ex.condition||'')+'</select></div>'
+              +'</div>'
+              +'<div style="margin-bottom:8px"><label style="font-size:11px;color:#4A6880;font-family:sans-serif;display:block;margin-bottom:3px">Justification <span style="color:#C62828">*</span></label>'
+                +'<input type="text" data-ex="'+i+'" data-f="justification" value="'+(ex.justification||'')+'" placeholder="e.g. Flight FR4521 departs 06:30, arrives 23:10 via Frankfurt" style="width:100%;padding:8px 10px;border:1px solid #E8EEF5;border-radius:5px;font-family:sans-serif;font-size:13px;color:#1A2E42;background:#fff;outline:none;box-sizing:border-box"></div>'
+              +'<div style="display:grid;grid-template-columns:1fr auto;gap:8px">'
+                +'<div><label style="font-size:11px;color:#4A6880;font-family:sans-serif;display:block;margin-bottom:3px">Alternative itinerary</label>'
+                  +'<input type="text" data-ex="'+i+'" data-f="altDescription" value="'+(ex.altDescription||'')+'" placeholder="e.g. Earlier flight same day, departs 14:00 arrives 18:30" style="width:100%;padding:8px 10px;border:1px solid #E8EEF5;border-radius:5px;font-family:sans-serif;font-size:13px;color:#1A2E42;background:#fff;outline:none;box-sizing:border-box"></div>'
+                +'<div style="min-width:90px"><label style="font-size:11px;color:#4A6880;font-family:sans-serif;display:block;margin-bottom:3px">Alt. cost (€)</label>'
+                  +'<input type="number" data-ex="'+i+'" data-f="altCost" value="'+(ex.altCost||'')+'" placeholder="e.g. 89" style="width:100%;padding:8px 10px;border:1px solid #E8EEF5;border-radius:5px;font-family:sans-serif;font-size:13px;color:#1A2E42;background:#fff;outline:none;box-sizing:border-box"></div>'
+              +'</div>'
+            +'</div>'
+          ).join('');
+          const canAdd=exs.length<2;
+          return '<div style="margin-bottom:14px;padding:11px 13px;border-radius:7px;border:1.5px solid #FDD;background:#FFF8F8;font-family:sans-serif">'
+            +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">'
+              +'<div>'
+                +'<div style="font-size:12px;font-weight:600;color:#C62828">⏱ Extended travel exceptions</div>'
+                +'<div style="font-size:11px;color:#4A6880;margin-top:2px">Travel day &gt;12h or arriving/departing after 21:00 — requires approval (max 2)</div>'
+              +'</div>'
+              +(canAdd?'<button id="ex-add" style="border:1.5px solid #C62828;background:#fff;color:#C62828;font-size:11px;font-weight:600;border-radius:5px;padding:4px 10px;cursor:pointer;font-family:sans-serif;white-space:nowrap">+ Add</button>':'')
+            +'</div>'
+            +exRows
+            +(exs.length===0?'<div style="font-size:11px;color:#9AAFC5;text-align:center;padding:6px 0">No exceptions declared</div>':'')
+          +'</div>';
+        })()
+      :''
+    )
     +'<div class="field"><label class="lbl">Purpose <span class="req">*</span></label>'
       +'<input type="text" id="f-scope" placeholder="e.g. Partner meeting, GA 2026" value="'+ST.scope+'" style="width:100%;padding:10px 12px;border:1.5px solid #E8EEF5;border-radius:6px;font-family:sans-serif;font-size:14px;color:#1A2E42;background:#fff;outline:none;box-sizing:border-box"></div>'
     +'<div class="field"><label class="lbl">Expense type <span class="req">*</span></label>'
@@ -390,9 +464,32 @@ function r0(){
         +'<button class="type-btn'+(ST.expType==="Progetti 26"?" sel":"")+'" data-t="Progetti 26">Projects 2026</button>'
       +'</div></div>'
     +projHtml
-    +'<div class="field"><label class="lbl">Estimated cost (€)</label>'
+    +'<div class="field"><label class="lbl">Estimated total cost (€)</label>'
       +'<input type="number" id="f-cost" placeholder="e.g. 450" value="'+ST.estimatedCost+'" style="width:100%;padding:10px 12px;border:1.5px solid #E8EEF5;border-radius:6px;font-family:sans-serif;font-size:14px;color:#1A2E42;background:#fff;outline:none;box-sizing:border-box">'
-      +(parseFloat(ST.estimatedCost)>=300?'<div style="margin-top:6px;font-size:12px;color:#E65100;font-family:sans-serif">ℹ️ Reminder: any single expense item ≥ €300 will require at least 2 written quotes</div>':'')
+      +(parseFloat(ST.estimatedCost)>=300
+        ?'<div style="margin-top:8px;padding:11px 13px;border-radius:7px;border:1.5px solid #FDD;background:#FFF8F8;font-family:sans-serif">'
+          +'<div style="font-size:12px;font-weight:600;color:#C62828;margin-bottom:7px">⚠️ Estimated cost ≥ €300 — cheapest option confirmation required</div>'
+          +'<div style="display:flex;align-items:flex-start;gap:8px;margin-bottom:8px;cursor:pointer" id="cost-check-row">'
+            +'<div style="width:18px;height:18px;border-radius:3px;border:1.5px solid '+(ST.costJustified?'#1F4E79':'#9AAFC5')+';background:'+(ST.costJustified?'#1F4E79':'#fff')+';flex-shrink:0;margin-top:1px;display:flex;align-items:center;justify-content:center">'
+              +(ST.costJustified?'<span style="color:#fff;font-size:11px">✓</span>':'')
+            +'</div>'
+            +'<span style="font-size:12px;color:#1A2E42">I confirm I have selected the most cost-effective option available</span>'
+          +'</div>'
+          +(ST.costJustified
+            ?'<div style="margin-bottom:8px"><label style="font-size:11px;color:#4A6880;display:block;margin-bottom:3px">Justification <span style="color:#C62828">*</span></label>'
+              +'<input type="text" id="f-cj" value="'+(ST.costJustification||'')+'" placeholder="e.g. Ryanair FR4521 €127 — only direct option; Vueling via Madrid €210" style="width:100%;padding:8px 10px;border:1px solid #E8EEF5;border-radius:5px;font-family:sans-serif;font-size:13px;color:#1A2E42;background:#fff;outline:none;box-sizing:border-box"></div>'
+              +'<div style="display:grid;grid-template-columns:1fr auto;gap:8px"><div>'
+                +'<label style="font-size:11px;color:#4A6880;display:block;margin-bottom:3px">Cheapest alternative considered</label>'
+                +'<input type="text" id="f-cad" value="'+(ST.costAltDescription||'')+'" placeholder="e.g. Easyjet via Lyon, departs 06:00, 2 stops" style="width:100%;padding:8px 10px;border:1px solid #E8EEF5;border-radius:5px;font-family:sans-serif;font-size:13px;color:#1A2E42;background:#fff;outline:none;box-sizing:border-box"></div>'
+                +'<div style="min-width:90px"><label style="font-size:11px;color:#4A6880;display:block;margin-bottom:3px">Alt. cost (€)</label>'
+                  +'<input type="number" id="f-cac" value="'+(ST.costAltCost||'')+'" placeholder="e.g. 95" style="width:100%;padding:8px 10px;border:1px solid #E8EEF5;border-radius:5px;font-family:sans-serif;font-size:13px;color:#1A2E42;background:#fff;outline:none;box-sizing:border-box"></div>'
+              +'</div>'
+              +'<div style="margin-top:7px;font-size:11px;color:#4A6880">📁 Upload comparison quotes to the mission folder once your request is approved.</div>'
+            :''
+          )
+        +'</div>'
+        :''
+      )
     +'</div>'
     +'<div class="field" style="margin-top:6px"><label class="lbl">Car use</label>'
       +'<div style="display:flex;align-items:center;gap:12px;padding:11px 13px;border:1.5px solid '+(ST.carUse?'#1F4E79':'#E8EEF5')+';border-radius:7px;background:'+(ST.carUse?'#D6E4F0':'#F7F9FC')+';cursor:pointer" id="km-toggle">'
@@ -401,7 +498,7 @@ function r0(){
         +'</div>'
         +'<div>'
           +'<div style="font-size:13px;font-weight:600;color:'+(ST.carUse?'#1F4E79':'#4A6880')+';font-family:sans-serif">'+(ST.carUse?'Personal car requested':'Not requested')+'</div>'
-          +'<div style="font-size:11px;color:#9AAFC5;font-family:sans-serif;margin-top:1px">Requires Director approval</div>'
+          +'<div style="font-size:11px;color:#9AAFC5;font-family:sans-serif;margin-top:1px">Requires approval</div>'
         +'</div>'
       +'</div></div>'
     +carReasonHtml;
@@ -422,6 +519,45 @@ function r0(){
   document.getElementById("f-dt").onchange=e=>ST.dateTo=e.target.value;
   document.getElementById("f-dest").oninput=e=>ST.destination=e.target.value;
   document.getElementById("f-country").onchange=e=>{ST.destCountry=e.target.value;r0()};
+  const pdEl=document.getElementById("f-pd");if(pdEl)pdEl.oninput=e=>{ST.programmeDays=parseInt(e.target.value)||0;r0();};
+  const tdEl=document.getElementById("f-td");if(tdEl)tdEl.oninput=e=>{ST.travelDays=parseInt(e.target.value)||0;if(ST.travelDays===0)ST.travelExceptions=[];r0();};
+
+  // Exception row: add button
+  const exAdd=document.getElementById("ex-add");
+  if(exAdd)exAdd.onclick=()=>{
+    if((ST.travelExceptions||[]).length<2){
+      ST.travelExceptions=[...(ST.travelExceptions||[]),{date:"",condition:"",justification:"",altDescription:"",altCost:""}];
+      r0();
+    }
+  };
+  // Exception row: field edits (no re-render needed, just update state)
+  document.querySelectorAll("[data-ex][data-f]").forEach(el=>{
+    const i=parseInt(el.dataset.ex);
+    const f=el.dataset.f;
+    el.addEventListener("input",()=>{
+      if(!ST.travelExceptions[i])return;
+      ST.travelExceptions[i]={...ST.travelExceptions[i],[f]:el.type==="number"?parseFloat(el.value)||"":el.value};
+    });
+    el.addEventListener("change",()=>{
+      if(!ST.travelExceptions[i])return;
+      ST.travelExceptions[i]={...ST.travelExceptions[i],[f]:el.value};
+    });
+  });
+  // Exception row: delete buttons
+  document.querySelectorAll("[data-ex-del]").forEach(el=>{
+    el.onclick=()=>{
+      const i=parseInt(el.dataset.exDel);
+      ST.travelExceptions=(ST.travelExceptions||[]).filter((_,idx)=>idx!==i);
+      r0();
+    };
+  });
+
+  // Cost ≥300 justification
+  const costCheckRow=document.getElementById("cost-check-row");
+  if(costCheckRow)costCheckRow.onclick=()=>{ST.costJustified=!ST.costJustified;r0();};
+  const cjEl=document.getElementById("f-cj");if(cjEl)cjEl.oninput=e=>ST.costJustification=e.target.value;
+  const cadEl=document.getElementById("f-cad");if(cadEl)cadEl.oninput=e=>ST.costAltDescription=e.target.value;
+  const cacEl=document.getElementById("f-cac");if(cacEl)cacEl.oninput=e=>ST.costAltCost=e.target.value;
   document.getElementById("f-scope").oninput=e=>ST.scope=e.target.value;
   document.getElementById("f-cost").onblur=e=>{ST.estimatedCost=e.target.value;r0()};
   document.getElementById("f-cost").oninput=e=>{ST.estimatedCost=e.target.value;};
@@ -448,6 +584,16 @@ async function submitRequest(){
   if(!ST.scope.trim())return toast("⚠️ Enter purpose");
   if(ST.expType==="Progetti 26"&&!ST.project)return toast("⚠️ Select a project");
   if(ST.carUse&&!ST.carReason)return toast("⚠️ Select a reason for car use");
+  if(allowanceApplies(ST.emp,ST.destCountry)&&(ST.programmeDays||0)+(ST.travelDays||0)<1)return toast("⚠️ Enter at least 1 programme or travel day");
+  // Validate exception rows: each must have condition + justification
+  const exs=ST.travelExceptions||[];
+  for(let i=0;i<exs.length;i++){
+    if(!exs[i].condition)return toast("⚠️ Exception "+(i+1)+": select a condition");
+    if(!exs[i].justification.trim())return toast("⚠️ Exception "+(i+1)+": enter a justification");
+  }
+  // If cost ≥300 and checkbox ticked, justification text is required
+  if(parseFloat(ST.estimatedCost)>=300&&ST.costJustified&&!ST.costJustification.trim())
+    return toast("⚠️ Enter justification for the selected option");
 
   const btn=document.getElementById("b0n");
   btn.textContent="⏳ Sending...";btn.disabled=true;
@@ -465,7 +611,15 @@ async function submitRequest(){
     project:ST.project||"",
     carUse:ST.carUse,
     carReason:ST.carReason||"",
-    estimatedCost:parseFloat(ST.estimatedCost)||0
+    estimatedCost:parseFloat(ST.estimatedCost)||0,
+    programmeDays:ST.programmeDays||0,
+    travelDays:ST.travelDays||0,
+    allowanceTotal:allowanceApplies(ST.emp,ST.destCountry)?calcAllowance(ST.programmeDays||0,ST.travelDays||0).total:0,
+    travelExceptions:exs,
+    costJustified:ST.costJustified,
+    costJustification:ST.costJustification||"",
+    costAltDescription:ST.costAltDescription||"",
+    costAltCost:parseFloat(ST.costAltCost)||0
   };
 
   // Show confirmation immediately — PA call happens in background
@@ -545,6 +699,50 @@ function r1(){
         +'<button class="type-btn'+(ST.expType==="Progetti 26"?" sel":"")+'" data-t="Progetti 26">Projects 2026</button>'
       +'</div></div>'
     +projHtml
+    +(allowanceApplies(ST.emp,ST.destCountry)
+      ?(()=>{
+          const pd=ST.programmeDays||0;
+          const td=ST.travelDays||0;
+          const exs=ST.travelExceptions||[];
+          const condLabel={
+            "12h":"More than 12h travel",
+            "21h":"Arrives/departs after 21:00",
+            "both":"More than 12h AND after 21:00"
+          };
+          const exHtml=exs.length
+            ?'<div style="margin-top:10px;border-top:1px solid #D6E4F0;padding-top:10px">'
+              +'<div style="font-size:11px;font-weight:600;color:#C62828;margin-bottom:6px">⏱ Full-day upgrades requested ('+exs.length+')</div>'
+              +exs.map((ex,i)=>
+                '<div style="background:#FFF8F8;border:1px solid #FDD;border-radius:5px;padding:7px 9px;margin-bottom:5px;font-size:11px;color:#1A2E42">'
+                  +'<strong>'+(ex.date||'Date TBC')+'</strong> — '+(condLabel[ex.condition]||ex.condition)
+                  +(ex.justification?'<br><span style="color:#4A6880">'+ex.justification+'</span>':'')
+                  +(ex.altDescription?'<br><span style="color:#4A6880">Alt: '+ex.altDescription+(ex.altCost?' (€'+ex.altCost+')':'')+'</span>':'')
+                +'</div>'
+              ).join('')
+            +'</div>'
+            :'';
+          return '<div style="margin-bottom:14px;padding:12px 14px;border-radius:8px;border:1.5px solid #A8C8E8;background:#EEF5FB;font-family:sans-serif">'
+            +'<div style="font-size:12px;font-weight:600;color:#1F4E79;margin-bottom:7px">💶 Mission Allowance days</div>'
+            +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">'
+              +'<div style="background:#fff;border-radius:6px;padding:8px 10px;border:1px solid #D6E4F0">'
+                +'<div style="font-size:10px;color:#4A6880;text-transform:uppercase;letter-spacing:.5px">Programme days</div>'
+                +'<div style="font-size:24px;font-weight:700;color:#1F4E79;margin:2px 0">'+pd+'</div>'
+                +'<div style="font-size:11px;color:#4A6880">full-day allowance each</div>'
+              +'</div>'
+              +'<div style="background:#fff;border-radius:6px;padding:8px 10px;border:1px solid #D6E4F0">'
+                +'<div style="font-size:10px;color:#4A6880;text-transform:uppercase;letter-spacing:.5px">Travel days</div>'
+                +'<div style="font-size:24px;font-weight:700;color:#1F4E79;margin:2px 0">'+td+'</div>'
+                +'<div style="font-size:11px;color:#4A6880">half-day allowance each</div>'
+              +'</div>'
+            +'</div>'
+            +exHtml
+            +(pd+td===0?'<div style="margin-top:7px;font-size:11px;color:#E65100">⚠️ No days declared — go back to the Request step to enter programme and travel days.</div>':'')
+          +'</div>';
+        })()
+      :(ST.destCountry==="Italy"||(!ST.destCountry&&ST.destCountry!==""))
+        ?'<div style="margin-bottom:14px;padding:9px 12px;border-radius:6px;background:#D6E4F0;font-family:sans-serif;font-size:12px;color:#4A6880">ℹ️ No mission allowance for this mission.</div>'
+        :''
+    )
     +kmHtml;
   const eg=document.getElementById("eg");
   EMP.forEach(e=>{
@@ -707,6 +905,24 @@ function r3(){
   const projItem=ST.project
     ?'<div class="s-item" style="grid-column:1/-1"><div class="s-label">Project</div><div class="s-val" style="font-size:13px">'+ST.project+'</div></div>'
     :'';
+  const allowanceItem=allowanceApplies(ST.emp,ST.destCountry)
+    ?(()=>{
+      const exs=ST.travelExceptions||[];
+      const exNote=exs.length
+        ?'<div style="font-size:11px;color:#C62828;margin-top:2px">⏱ '+exs.length+' full-day upgrade'+(exs.length>1?'s':'')+' requested — pending Director approval</div>'
+        :'';
+      return '<div class="s-item" style="grid-column:1/-1"><div class="s-label">Allowance days</div>'
+        +'<div class="s-val" style="font-size:12px">'+(ST.programmeDays||0)+' programme + '+(ST.travelDays||0)+' travel'+exNote+'</div></div>';})()
+    :'';
+  const costAlert=(parseFloat(ST.estimatedCost)>=300&&ST.costJustified)
+    ?'<div style="margin-bottom:10px;padding:8px 12px;border-radius:6px;font-size:12px;background:#FFF8F8;color:#C62828;border-left:3px solid #C62828;font-family:sans-serif">'
+      +'⚠️ Cost ≥ €300 — upload comparison quotes to the mission folder before reimbursement'
+    +'</div>'
+    :(parseFloat(ST.estimatedCost)>=300&&!ST.costJustified)
+      ?'<div style="margin-bottom:10px;padding:8px 12px;border-radius:6px;font-size:12px;background:#FFF3E0;color:#E65100;border-left:3px solid #E65100;font-family:sans-serif">'
+        +'⚠️ Cost ≥ €300 — cheapest option confirmation was not completed. Please go back to Step 0.'
+      +'</div>'
+      :'';
   const dupAlert=dups>0
     ?'<div class="alert-warn">⚠️ '+dups+' potential duplicate(s) detected — review below</div>'
     :'';
@@ -727,9 +943,11 @@ function r3(){
         +'<div class="s-item"><div class="s-label">Employee</div><div class="s-val" style="font-size:14px">'+emp.name+'</div></div>'
         +'<div class="s-item"><div class="s-label">Type</div><div class="s-val" style="font-size:12px">'+(ST.expType==="Spese di funzionamento"?"Institutional activities":ST.expType==="Progetti 26"?"Projects 2026":ST.expType)+'</div></div>'
         +projItem
+        +allowanceItem
         +'<div class="s-item" style="grid-column:1/-1"><div class="s-label">Auth Ref</div><div class="s-val" style="font-size:12px">'+ST.auth+'</div></div>'
       +'</div>'
     +'</div>'
+    +costAlert
     +dupAlert
     +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:11px">'
       +'<span class="sec-title" style="font-size:16px">Expense Rows</span>'
