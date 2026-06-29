@@ -261,33 +261,40 @@ function findCardMatch(date, amt, currency, receiptDesc, transactions, dateFrom,
   });
   if(!inRange.length) return null;
 
-  // Pass 1 — FX match: SEK receipt paid in SEK → match fxAmount
-  if(currency==="SEK"){
-    const fxC=inRange.filter(t=>t.fxCurrency==="SEK" && t.fxAmount>0);
-    if(fxC.length){
-      fxC.sort((a,b)=>Math.abs((a.fxAmount||0)-amt)-Math.abs((b.fxAmount||0)-amt));
-      if(Math.abs((fxC[0].fxAmount||0)-amt)/(amt||1)<0.05)
-        return {...fxC[0], matchType:'fx'};
+  // Pass 1 — FX match: statement line has fxCurrency=SEK
+  // Fires regardless of receipt currency (AI may return EUR even for SEK receipt)
+  // Match: fxAmount ≈ receipt amount (if receipt is SEK) OR amtEur ≈ receipt amount (if receipt is EUR)
+  const fxLines=inRange.filter(t=>t.fxCurrency==="SEK" && t.fxAmount>0);
+  if(fxLines.length){
+    // If receipt is in SEK, match on fxAmount
+    if(currency==="SEK"){
+      fxLines.sort((a,b)=>Math.abs((a.fxAmount||0)-amt)-Math.abs((b.fxAmount||0)-amt));
+      if(Math.abs((fxLines[0].fxAmount||0)-amt)/(amt||1)<0.05)
+        return {...fxLines[0], matchType:'fx'};
+    }
+    // If receipt is in EUR, match on amtEur
+    if(currency==="EUR"){
+      fxLines.sort((a,b)=>Math.abs((a.amtEur||0)-amt)-Math.abs((b.amtEur||0)-amt));
+      if(Math.abs((fxLines[0].amtEur||0)-amt)/(amt||1)<0.05)
+        return {...fxLines[0], matchType:'fx'};
     }
   }
 
-  // Pass 2 — EUR amount match: receipt in EUR, match by amount (within 2%)
-  if(currency==="EUR"){
-    const eurC=inRange.filter(t=>!t.fxCurrency); // EUR-only lines
-    eurC.sort((a,b)=>Math.abs((a.amtEur||0)-amt)-Math.abs((b.amtEur||0)-amt));
-    if(eurC.length && Math.abs((eurC[0].amtEur||0)-amt)/(amt||1)<0.02)
-      return {...eurC[0], matchType:'amount'};
+  // Pass 2 — EUR amount match: statement line has no FX, match EUR amount
+  const eurLines=inRange.filter(t=>!t.fxCurrency);
+  if(eurLines.length && currency==="EUR"){
+    eurLines.sort((a,b)=>Math.abs((a.amtEur||0)-amt)-Math.abs((b.amtEur||0)-amt));
+    if(Math.abs((eurLines[0].amtEur||0)-amt)/(amt||1)<0.02)
+      return {...eurLines[0], matchType:'amount'};
   }
 
-  // Pass 3 — Name match: SEK receipt paid in EUR (no FX line), or unmatched receipt
-  // Require score >= 1 since date is already a tight constraint
-  const nameCandidates=inRange
-    .filter(t=>!t.fxCurrency)
+  // Pass 3 — Name match fallback: any line with matching merchant name tokens
+  const allCandidates=inRange
     .map(t=>({...t, score:nameMatchScore(receiptDesc, t.desc)}))
     .filter(t=>t.score>=1)
     .sort((a,b)=>b.score-a.score);
-  if(nameCandidates.length)
-    return {...nameCandidates[0], matchType:'name'};
+  if(allCandidates.length)
+    return {...allCandidates[0], matchType:'name'};
 
   return null;
 }
