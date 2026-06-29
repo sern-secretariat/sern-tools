@@ -172,6 +172,8 @@ function toast(msg,d=2800){const t=document.getElementById("toast");t.textConten
 function detectRole(name,card){
   const f=name.toLowerCase();
   if(f.includes("telepass"))return"telepass";
+  // Explicit card statement patterns
+  if(f.includes("statement")||f.includes("soldo")||f.includes("credit_card")||f.includes("kontoutdrag")||f.includes("utdrag"))return"card";
   if(card && f.includes(card.toLowerCase()))return"card";
   for(const e of EMP)if(e.card && f.includes(e.card.toLowerCase()))return"card";
   return"receipt";
@@ -214,24 +216,73 @@ function dupCheck(rows){
   });
 }
 
-// Find a card statement transaction matching a SEK receipt by date proximity and best-effort amount
-function findCardMatch(date,sekAmt,transactions){
-  if(!date||!transactions.length)return null;
-  // Look for transactions within ±2 days of receipt date
-  const rDate=new Date(date);
-  const candidates=transactions.filter(t=>{
-    if(!t.date)return false;
-    const diff=Math.abs(new Date(t.date)-rDate)/(1000*60*60*24);
-    return diff<=2;
+// Extract significant tokens from a merchant name string for fuzzy matching
+function merchantTokens(str){
+  if(!str) return [];
+  return str.toUpperCase()
+    .replace(/[\\\/\|,\.]/g,' ')
+    .split(/\s+/)
+    .filter(t => t.length >= 3 &&
+      !['THE','AND','FOR','FROM','SWE','SWESWE','AB','SE','GOT','STO','ARN','APT'].includes(t));
+}
+
+// Count how many tokens from the receipt name appear in the statement desc
+function nameMatchScore(receiptDesc, stmtDesc){
+  const rt = merchantTokens(receiptDesc);
+  const sd = (stmtDesc||'').toUpperCase();
+  if(!rt.length) return 0;
+  return rt.filter(t => sd.includes(t)).length;
+}
+
+// Match a SEK receipt to a Soldo statement line.
+// Pass 1 (FX match):   fxCurrency===SEK and fxAmount ≈ receipt SEK amount  → certain, auto-fill EUR
+// Pass 2 (name match): no FX line, but merchant name tokens overlap          → uncertain, flag for verification
+function findCardMatch(date, sekAmt, receiptDesc, transactions, dateFrom, dateTo){
+  if(!date || !transactions.length) return null;
+
+  const rDate = new Date(date);
+  const mFrom = dateFrom ? new Date(dateFrom) : null;
+  const mTo   = dateTo   ? new Date(dateTo)   : null;
+
+  // Filter to mission date range + ±1 day of receipt
+  const inRange = transactions.filter(t => {
+    if(!t.date) return false;
+    const tDate = new Date(t.date);
+    if(mFrom && tDate < mFrom) return false;
+    if(mTo   && tDate > mTo)   return false;
+    const diff = Math.abs(tDate - rDate) / (1000*60*60*24);
+    return diff <= 1;
   });
-  if(!candidates.length)return null;
-  // If only one candidate on that date range, use it
-  if(candidates.length===1)return candidates[0];
-  // If multiple, pick the one whose amtEur is most plausible (smallest that still >0)
-  // (SEK/EUR rate ~10, so EUR amount should be roughly sekAmt/10)
-  const approxEur=sekAmt/10;
-  candidates.sort((a,b)=>Math.abs(a.amtEur-approxEur)-Math.abs(b.amtEur-approxEur));
-  return candidates[0];
+  if(!inRange.length) return null;
+
+  // Pass 1 — FX match: statement line has fxCurrency===SEK and fxAmount close to receipt SEK
+  const fxCandidates = inRange.filter(t =>
+    t.fxCurrency && t.fxCurrency.toUpperCase()==='SEK' && t.fxAmount > 0
+  );
+  if(fxCandidates.length){
+    fxCandidates.sort((a,b) =>
+      Math.abs((a.fxAmount||0) - sekAmt) - Math.abs((b.fxAmount||0) - sekAmt)
+    );
+    const best = fxCandidates[0];
+    // Accept if within 5% of the SEK amount
+    if(Math.abs((best.fxAmount||0) - sekAmt) / (sekAmt||1) < 0.05){
+      return { ...best, matchType: 'fx' };
+    }
+  }
+
+  // Pass 2 — Name match fallback: no FX line (employee paid in EUR at terminal)
+  // Require at least 2 tokens in common between receipt desc and statement desc
+  const nameCandidates = inRange
+    .filter(t => !t.fxCurrency)   // only EUR-only lines
+    .map(t => ({ ...t, score: nameMatchScore(receiptDesc, t.desc) }))
+    .filter(t => t.score >= 2)
+    .sort((a,b) => b.score - a.score);
+
+  if(nameCandidates.length){
+    return { ...nameCandidates[0], matchType: 'name' };
+  }
+
+  return null;
 }
 
 async function parseReceipt(file){
@@ -864,14 +915,16 @@ async function processFiles(){
       rf.status="done";
       let row=p?{id:ni(),date:p.date||"",desc:p.description||rf.file.name.replace(/\.[^.]+$/,""),cat:p.category||catFromText(p.description||""),amt:p.amount||0,origCur:p.currency||"EUR",km:"",isDup:false,src:rf.file.name}
         :{id:ni(),date:"",desc:rf.file.name.replace(/\.[^.]+$/,""),cat:"Other",amt:0,origCur:"EUR",km:"",isDup:false,src:rf.file.name};
-      // If receipt is in SEK and we have card statement, try to find matching EUR amount
-      if(row.origCur==="SEK"&&cardTransactions.length){
-        const match=findCardMatch(row.date,row.amt,cardTransactions);
+      // If receipt is in SEK and we have card statement, look up EUR amount
+      if(row.origCur==="SEK" && cardTransactions.length){
+        const match = findCardMatch(row.date, row.amt, row.desc, cardTransactions, ST.dateFrom, ST.dateTo);
         if(match){
-          row.amt=match.amtEur;
-          row.origCur="EUR";
-          row.desc=row.desc||match.desc;
-          row.cardMatched=true;
+          row.sekAmt      = row.amt;
+          row.amt         = match.amtEur;
+          row.origCur     = "EUR";
+          row.cardMatched = true;
+          row.cardMatchType = match.matchType; // 'fx' or 'name'
+          row.cardMatchDesc = match.desc||"";
         }
       }
       newRows.push(row);
@@ -977,7 +1030,13 @@ function r3(){
       ?'<div style="padding:8px 12px;border-radius:6px;font-size:12px;background:#FFF3E0;color:#E65100;border-left:3px solid #E65100;font-family:sans-serif">⚠️ Single expense ≥ €300 — attach at least 2 written quotes</div>'
       :'';
     const cardMatchNote=row.cardMatched
-      ?'<div style="padding:7px 12px;border-radius:6px;font-size:12px;background:#E8F5E9;color:#2E7D32;border-left:3px solid #2E7D32;font-family:sans-serif">💳 Amount converted from SEK via card statement</div>'
+      ?(r.sekAmt
+        ?(r.cardMatchType==='fx'
+          ?'<div style="padding:7px 12px;border-radius:6px;font-size:12px;background:#E8F5E9;color:#2E7D32;border-left:3px solid #2E7D32;font-family:sans-serif">💳 SEK receipt: <strong>'+r.sekAmt.toFixed(2)+' SEK</strong> → <strong>€'+(parseFloat(r.amt)||0).toFixed(2)+'</strong> — converted by Soldo (FX match)</div>'
+          :'<div style="padding:7px 12px;border-radius:6px;font-size:12px;background:#FFF8E1;color:#E65100;border-left:3px solid #F9A825;font-family:sans-serif">💳 SEK receipt: <strong>'+r.sekAmt.toFixed(2)+' SEK</strong> → <strong>€'+(parseFloat(r.amt)||0).toFixed(2)+'</strong> matched by merchant name — <strong>please verify</strong></div>'
+        )
+        :'<div style="padding:7px 12px;border-radius:6px;font-size:12px;background:#E8F5E9;color:#2E7D32;border-left:3px solid #2E7D32;font-family:sans-serif">💳 Amount confirmed via card statement</div>'
+      )
       :'';
     const dupWarn=row.isDup
       ?'<div class="alert-warn" style="margin:0">⚠️ Possible duplicate — same date &amp; amount as another row</div>'
