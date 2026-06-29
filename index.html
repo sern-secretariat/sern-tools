@@ -216,71 +216,78 @@ function dupCheck(rows){
   });
 }
 
-// Extract significant tokens from a merchant name string for fuzzy matching
+// Extract significant tokens from a merchant name for fuzzy matching
 function merchantTokens(str){
   if(!str) return [];
+  const STOP=new Set(['THE','AND','FOR','FROM','SWE','SWESWE','AB','SE','STO','ARN','APT','GOT','LS','LTD','SPA']);
   return str.toUpperCase()
     .replace(/[\\\/\|,\.]/g,' ')
     .split(/\s+/)
-    .filter(t => t.length >= 3 &&
-      !['THE','AND','FOR','FROM','SWE','SWESWE','AB','SE','GOT','STO','ARN','APT'].includes(t));
+    .filter(t=>t.length>=3 && !STOP.has(t));
 }
 
-// Count how many tokens from the receipt name appear in the statement desc
 function nameMatchScore(receiptDesc, stmtDesc){
-  const rt = merchantTokens(receiptDesc);
-  const sd = (stmtDesc||'').toUpperCase();
+  const rt=merchantTokens(receiptDesc);
+  const sd=(stmtDesc||'').toUpperCase();
   if(!rt.length) return 0;
-  return rt.filter(t => sd.includes(t)).length;
+  return rt.filter(t=>sd.includes(t)).length;
 }
 
-// Match a SEK receipt to a Soldo statement line.
-// Pass 1 (FX match):   fxCurrency===SEK and fxAmount ≈ receipt SEK amount  → certain, auto-fill EUR
-// Pass 2 (name match): no FX line, but merchant name tokens overlap          → uncertain, flag for verification
-function findCardMatch(date, sekAmt, receiptDesc, transactions, dateFrom, dateTo){
+// Match a receipt to a Soldo statement line.
+//
+// Pass 1 — FX match (SEK receipt paid in SEK):
+//   fxCurrency===SEK and fxAmount ≈ receipt SEK amount → certain
+//
+// Pass 2 — Amount match (any receipt paid in EUR abroad):
+//   No FX line, EUR amount on statement ≈ receipt amount, same date → certain
+//
+// Pass 3 — Name match fallback (SEK receipt paid in EUR, no FX line):
+//   Merchant name tokens overlap, same date → uncertain, flag for verify
+//
+function findCardMatch(date, amt, currency, receiptDesc, transactions, dateFrom, dateTo){
   if(!date || !transactions.length) return null;
 
-  const rDate = new Date(date);
-  const mFrom = dateFrom ? new Date(dateFrom) : null;
-  const mTo   = dateTo   ? new Date(dateTo)   : null;
+  const rDate=new Date(date);
+  const mFrom=dateFrom?new Date(dateFrom):null;
+  const mTo=dateTo?new Date(dateTo):null;
 
-  // Filter to mission date range + ±1 day of receipt
-  const inRange = transactions.filter(t => {
+  // Filter to mission date range + ±1 day of receipt date
+  const inRange=transactions.filter(t=>{
     if(!t.date) return false;
-    const tDate = new Date(t.date);
-    if(mFrom && tDate < mFrom) return false;
-    if(mTo   && tDate > mTo)   return false;
-    const diff = Math.abs(tDate - rDate) / (1000*60*60*24);
-    return diff <= 1;
+    const tDate=new Date(t.date);
+    if(mFrom && tDate<mFrom) return false;
+    if(mTo   && tDate>mTo)   return false;
+    return Math.abs(tDate-rDate)/(1000*60*60*24)<=1;
   });
   if(!inRange.length) return null;
 
-  // Pass 1 — FX match: statement line has fxCurrency===SEK and fxAmount close to receipt SEK
-  const fxCandidates = inRange.filter(t =>
-    t.fxCurrency && t.fxCurrency.toUpperCase()==='SEK' && t.fxAmount > 0
-  );
-  if(fxCandidates.length){
-    fxCandidates.sort((a,b) =>
-      Math.abs((a.fxAmount||0) - sekAmt) - Math.abs((b.fxAmount||0) - sekAmt)
-    );
-    const best = fxCandidates[0];
-    // Accept if within 5% of the SEK amount
-    if(Math.abs((best.fxAmount||0) - sekAmt) / (sekAmt||1) < 0.05){
-      return { ...best, matchType: 'fx' };
+  // Pass 1 — FX match: SEK receipt paid in SEK → match fxAmount
+  if(currency==="SEK"){
+    const fxC=inRange.filter(t=>t.fxCurrency==="SEK" && t.fxAmount>0);
+    if(fxC.length){
+      fxC.sort((a,b)=>Math.abs((a.fxAmount||0)-amt)-Math.abs((b.fxAmount||0)-amt));
+      if(Math.abs((fxC[0].fxAmount||0)-amt)/(amt||1)<0.05)
+        return {...fxC[0], matchType:'fx'};
     }
   }
 
-  // Pass 2 — Name match fallback: no FX line (employee paid in EUR at terminal)
-  // Require at least 2 tokens in common between receipt desc and statement desc
-  const nameCandidates = inRange
-    .filter(t => !t.fxCurrency)   // only EUR-only lines
-    .map(t => ({ ...t, score: nameMatchScore(receiptDesc, t.desc) }))
-    .filter(t => t.score >= 2)
-    .sort((a,b) => b.score - a.score);
-
-  if(nameCandidates.length){
-    return { ...nameCandidates[0], matchType: 'name' };
+  // Pass 2 — EUR amount match: receipt in EUR, match by amount (within 2%)
+  if(currency==="EUR"){
+    const eurC=inRange.filter(t=>!t.fxCurrency); // EUR-only lines
+    eurC.sort((a,b)=>Math.abs((a.amtEur||0)-amt)-Math.abs((b.amtEur||0)-amt));
+    if(eurC.length && Math.abs((eurC[0].amtEur||0)-amt)/(amt||1)<0.02)
+      return {...eurC[0], matchType:'amount'};
   }
+
+  // Pass 3 — Name match: SEK receipt paid in EUR (no FX line), or unmatched receipt
+  // Require score >= 1 since date is already a tight constraint
+  const nameCandidates=inRange
+    .filter(t=>!t.fxCurrency)
+    .map(t=>({...t, score:nameMatchScore(receiptDesc, t.desc)}))
+    .filter(t=>t.score>=1)
+    .sort((a,b)=>b.score-a.score);
+  if(nameCandidates.length)
+    return {...nameCandidates[0], matchType:'name'};
 
   return null;
 }
@@ -987,14 +994,14 @@ async function processFiles(){
       rf.status="done";
       let row=p?{id:ni(),date:p.date||"",desc:p.description||rf.file.name.replace(/\.[^.]+$/,""),cat:p.category||catFromText(p.description||""),amt:p.amount||0,origCur:p.currency||"EUR",km:"",isDup:false,src:rf.file.name}
         :{id:ni(),date:"",desc:rf.file.name.replace(/\.[^.]+$/,""),cat:"Other",amt:0,origCur:"EUR",km:"",isDup:false,src:rf.file.name};
-      // If receipt is in SEK and we have card statement, look up EUR amount
-      if(row.origCur==="SEK" && cardTransactions.length){
-        const match = findCardMatch(row.date, row.amt, row.desc, cardTransactions, ST.dateFrom, ST.dateTo);
+      // If card statement present, try to match this receipt to a Soldo line
+      if(cardTransactions.length && row.date){
+        const match = findCardMatch(row.date, row.amt, row.origCur, row.desc, cardTransactions, ST.dateFrom, ST.dateTo);
         if(match){
-          row.sekAmt      = row.amt;
-          row.amt         = match.amtEur;
-          row.origCur     = "EUR";
-          row.cardMatched = true;
+          row.sekAmt        = (row.origCur==="SEK") ? row.amt : null;
+          row.amt           = match.amtEur;
+          row.origCur       = "EUR";
+          row.cardMatched   = true;
           row.cardMatchType = match.matchType;
           row.cardMatchDesc = match.desc||"";
         }
