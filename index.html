@@ -322,44 +322,20 @@ async function parseReceipt(file){
 
 async function parseCardStatement(file){
   if(file.type!=="application/pdf") return null;
-
-  // Load PDF.js once
-  if(!window.pdfjsLib){
-    await new Promise((res,rej)=>{
-      const s=document.createElement('script');
-      const t=setTimeout(()=>rej(new Error('timeout')),12000);
-      s.src='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
-      s.onload=()=>{clearTimeout(t);pdfjsLib.GlobalWorkerOptions.workerSrc='';res();};
-      s.onerror=()=>{clearTimeout(t);rej(new Error('load failed'));};
-      document.head.appendChild(s);
-    });
-  }
-
-  // Extract all text from the PDF
-  const arrayBuf=await file.arrayBuffer();
-  const pdf=await pdfjsLib.getDocument({data:arrayBuf}).promise;
-  let rawText='';
-  for(let p=1;p<=pdf.numPages;p++){
-    const page=await pdf.getPage(p);
-    const content=await page.getTextContent();
-    rawText+=content.items.map(i=>i.str||'').join(' ')+'\n';
-  }
-  console.log('Soldo raw text (500 chars):', rawText.substring(0,500));
-
-  // Send just the TEXT (not the PDF) to the worker — much faster, no timeout risk
+  const b64=await fileToB64(file);
   const controller=new AbortController();
-  const timer=setTimeout(()=>controller.abort(),30000);
+  const timer=setTimeout(()=>controller.abort(),45000);
   try{
     const res=await fetch(WORKER_URL,{
       method:"POST",
       headers:{"Content-Type":"application/json"},
-      body:JSON.stringify({action:"parseCardStatementText", text:rawText}),
+      body:JSON.stringify({action:"parseCardStatement", fileData:b64, mediaType:file.type}),
       signal:controller.signal
     });
     const data=await res.json();
     if(data.error) throw new Error(data.error);
-    const txns=(data.transactions||[]);
-    console.log('Soldo parsed:', JSON.stringify(txns));
+    const txns=data.transactions||[];
+    console.log('Statement transactions:', JSON.stringify(txns));
     toast('💳 Statement: '+txns.length+' transactions',2500);
     return data;
   }finally{
