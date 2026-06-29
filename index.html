@@ -122,7 +122,7 @@ const EMP=[
   {id:"alessia", name:"Alessia Mereu",            email:"alessia.mereu@sern.eu",             base:"—",           card:"",               km:false, tpl:"Standard"},
   {id:"nanna",   name:"Nanna Mikkelsen",            email:"nanna.mikkelsen@sern.eu"     ,  base:"—",           card:"soldo_nanna",    km:false, tpl:"Standard"},
 ];
-const PROJECTS=["ACCREDITATION 24-25","ACCREDITATION 25-26","BRIDGE 26","FOOD4FUTURE 26","INTEC 26","RETHINK 26","STEAM 26","STRADE FUTURE 26","TRANSMICVET 26"];
+const PROJECTS=["ACCREDITATION 25-26","ACCREDITATION 26-27","ALLIN 26","CARE-GO 26","DATA4MUNI 26","FOOD4FUTURE 26","INTEC 26","RETHINK 26","STRADE FUTURE 26","TRANSMICVET 26"];
 const CATS=["Meals","Flight","Accommodation","Train-bus-taxi","Car rental","Fuel","Telepass","Fees","Other"];
 const CICONS={Meals:"🍽️",Flight:"✈️",Accommodation:"🏨","Train-bus-taxi":"🚆","Car rental":"🚗",Fuel:"⛽",Telepass:"🛣️",Fees:"📋",Other:"📎"};
 // ⚠️ CONFIGURE: paste your Anthropic API key here (never commit to GitHub)
@@ -1082,6 +1082,7 @@ function r3(){
   };
 
   const rc=document.getElementById("rc");
+  try{
   ST.rows.forEach((row,idx)=>{
     const d=document.createElement("div");
     d.className="exp-row"+(row.isDup?" dup":"");
@@ -1094,11 +1095,12 @@ function r3(){
     const over300Warn=(parseFloat(row.amt)||0)>=300
       ?'<div style="padding:8px 12px;border-radius:6px;font-size:12px;background:#FFF3E0;color:#E65100;border-left:3px solid #E65100;font-family:sans-serif">⚠️ Single expense ≥ €300 — attach at least 2 written quotes</div>'
       :'';
+    const sa=row.sekAmt;const mt=row.cardMatchType;
     const cardMatchNote=row.cardMatched
-      ?(row.sekAmt
-        ?(row.cardMatchType==='fx'
-          ?'<div style="padding:7px 12px;border-radius:6px;font-size:12px;background:#E8F5E9;color:#2E7D32;border-left:3px solid #2E7D32;font-family:sans-serif">💳 SEK receipt: <strong>'+row.sekAmt.toFixed(2)+' SEK</strong> → <strong>€'+(parseFloat(row.amt)||0).toFixed(2)+'</strong> — converted by Soldo (FX match)</div>'
-          :'<div style="padding:7px 12px;border-radius:6px;font-size:12px;background:#FFF8E1;color:#E65100;border-left:3px solid #F9A825;font-family:sans-serif">💳 SEK receipt: <strong>'+row.sekAmt.toFixed(2)+' SEK</strong> → <strong>€'+(parseFloat(row.amt)||0).toFixed(2)+'</strong> matched by merchant name — <strong>please verify</strong></div>'
+      ?(sa
+        ?(mt==='fx'
+          ?'<div style="padding:7px 12px;border-radius:6px;font-size:12px;background:#E8F5E9;color:#2E7D32;border-left:3px solid #2E7D32;font-family:sans-serif">💳 SEK receipt: <strong>'+(+sa).toFixed(2)+' SEK</strong> → <strong>€'+(parseFloat(row.amt)||0).toFixed(2)+'</strong> — converted by Soldo (FX match)</div>'
+          :'<div style="padding:7px 12px;border-radius:6px;font-size:12px;background:#FFF8E1;color:#E65100;border-left:3px solid #F9A825;font-family:sans-serif">💳 SEK receipt: <strong>'+(+sa).toFixed(2)+' SEK</strong> → <strong>€'+(parseFloat(row.amt)||0).toFixed(2)+'</strong> matched by merchant name — <strong>please verify</strong></div>'
         )
         :'<div style="padding:7px 12px;border-radius:6px;font-size:12px;background:#E8F5E9;color:#2E7D32;border-left:3px solid #2E7D32;font-family:sans-serif">💳 Amount confirmed via card statement</div>'
       )
@@ -1110,12 +1112,13 @@ function r3(){
       ?'<button class="btn-keep" data-keep="'+row.id+'">✓ Keep</button>'
       :'';
     const dupTag=row.isDup?'<span class="dup-tag">DUP</span>':'';
+    const X=s=>String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
     const bodyHtml=open
       ?'<div class="exp-row-body">'
         +'<div class="field"><label class="lbl">Date</label>'
-          +'<input type="date" value="'+row.date+'" data-id="'+row.id+'" data-f="date"></div>'
+          +'<input type="date" value="'+X(row.date)+'" data-id="'+row.id+'" data-f="date"></div>'
         +'<div class="field"><label class="lbl">Description</label>'
-          +'<input type="text" value="'+row.desc+'" placeholder="Merchant / service" data-id="'+row.id+'" data-f="desc"></div>'
+          +'<input type="text" value="'+X(row.desc)+'" placeholder="Merchant / service" data-id="'+row.id+'" data-f="desc"></div>'
         +'<div class="field"><label class="lbl">Category</label>'
           +'<select data-id="'+row.id+'" data-f="cat">'+catOpts+'</select></div>'
         +'<div class="field"><label class="lbl">Amount (EUR)</label>'
@@ -1133,7 +1136,7 @@ function r3(){
     d.innerHTML=
       '<div class="exp-row-head">'
         +'<div class="row-num">'+(idx+1)+'</div>'
-        +'<div class="row-summary">'+(row.date||'?')+' · '+(row.desc||'No description')+'</div>'
+        +'<div class="row-summary">'+(row.date||'?')+' · '+X(row.desc||'No description')+'</div>'
         +dupTag
         +'<div class="row-amt">€'+(parseFloat(row.amt)||0).toFixed(2)+'</div>'
         +'<span style="color:#9AAFC5;font-size:11px;flex-shrink:0;font-family:sans-serif">'+(open?'▲':'▼')+'</span>'
@@ -1150,6 +1153,10 @@ function r3(){
     if(kb)kb.onclick=e=>{e.stopPropagation();ST.rows=ST.rows.map(r=>r.id==kb.dataset.keep?{...r,isDup:false}:r);r3()};
     rc.appendChild(d);
   });
+  }catch(e){
+    console.error('Row render error:',e);
+    rc.innerHTML='<div style="padding:12px;background:#FFEBEE;color:#C62828;border-radius:6px;font-family:sans-serif;font-size:13px">⚠️ Row display error: '+e.message+'<br>Data is correct — you can still generate the Excel.</div>';
+  }
 
   document.getElementById("footer").innerHTML=`<div class="btn-row">
     <button class="btn-secondary" id="b3b">← Back</button>
