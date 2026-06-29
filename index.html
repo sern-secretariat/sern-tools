@@ -289,28 +289,103 @@ async function parseReceipt(file){
   const isImg=file.type.startsWith("image/"),isPdf=file.type==="application/pdf";
   if(!isImg&&!isPdf)return null;
   const b64=await fileToB64(file);
-  const res=await fetch(WORKER_URL,{
-    method:"POST",
-    headers:{"Content-Type":"application/json"},
-    body:JSON.stringify({fileData:b64, mediaType:file.type})
-  });
-  const data=await res.json();
-  if(data.error)throw new Error(data.error);
-  return data;
+  const controller=new AbortController();
+  const timeout=setTimeout(()=>controller.abort(),30000); // 30s timeout
+  try{
+    const res=await fetch(WORKER_URL,{
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({fileData:b64, mediaType:file.type}),
+      signal:controller.signal
+    });
+    const data=await res.json();
+    if(data.error)throw new Error(data.error);
+    return data;
+  }finally{
+    clearTimeout(timeout);
+  }
 }
 
 async function parseCardStatement(file){
-  const isPdf=file.type==="application/pdf";
-  if(!isPdf)return null;
-  const b64=await fileToB64(file);
-  const res=await fetch(WORKER_URL,{
-    method:"POST",
-    headers:{"Content-Type":"application/json"},
-    body:JSON.stringify({action:"parseCardStatement", fileData:b64, mediaType:file.type})
-  });
-  const data=await res.json();
-  if(data.error)throw new Error(data.error);
-  return data; // {transactions:[{date, amtEur, desc}]}
+  if(file.type!=="application/pdf") return null;
+
+  // Load PDF.js if not already loaded
+  if(!window.pdfjsLib){
+    await new Promise((res,rej)=>{
+      const s=document.createElement('script');
+      s.src='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
+      s.onload=()=>{
+        pdfjsLib.GlobalWorkerOptions.workerSrc=
+          'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+        res();
+      };
+      s.onerror=rej;
+      document.head.appendChild(s);
+    });
+  }
+
+  // Extract all text from the PDF
+  const arrayBuf=await file.arrayBuffer();
+  const pdf=await pdfjsLib.getDocument({data:arrayBuf}).promise;
+  let fullText='';
+  for(let p=1;p<=pdf.numPages;p++){
+    const page=await pdf.getPage(p);
+    const content=await page.getTextContent();
+    fullText+=content.items.map(i=>i.str).join(' ')+'\n';
+  }
+
+  // Parse Soldo statement: extract Pagamento lines
+  // Soldo text layout (per row after PDF extraction):
+  //   DD/MM/YY  DD/MM/YY  Pagamento  Category  Name  Name | * XXXX  Merchant desc  -amt  [commission]  [FX line e.g. SEK -125,00]
+  // Strategy: find all "Pagamento" blocks, extract date + amtEur + desc + optional FX
+  const transactions=[];
+  // Split into lines and scan
+  const lines=fullText.split(/\n/);
+  const dateRx=/(\d{2}\/\d{2}\/\d{2})/;
+  const amtRx=/-(\d{1,4}[.,]\d{2})\s*$/;          // last negative amount on the token group
+  const fxRx=/([A-Z]{3})\s*[-–]\s*(\d{1,5}[.,]\d{2})/; // e.g. SEK -125,00
+
+  // Concatenate everything into one string and split on "Pagamento"
+  const allText=lines.join(' ');
+  const blocks=allText.split(/Pagamento/);
+  blocks.shift(); // first element is the header before first Pagamento
+
+  for(const block of blocks){
+    // Date: first date in the block (Data operazione is second occurrence)
+    const dates=block.match(/(\d{2}\/\d{2}\/\d{2,4})/g);
+    if(!dates||dates.length<1) continue;
+    // Use second date if available (data operazione), else first
+    const rawDate=dates.length>=2?dates[1]:dates[0];
+    const parts=rawDate.split('/');
+    const yr=parts[2].length===2?'20'+parts[2]:parts[2];
+    const date=yr+'-'+parts[1]+'-'+parts[0];
+
+    // EUR amount: look for negative amount pattern
+    const amtMatch=block.match(/-\s*(\d{1,4})[,.](\d{2})(?=\s|$)/);
+    if(!amtMatch) continue;
+    const amtEur=parseFloat(amtMatch[1]+'.'+amtMatch[2]);
+    if(!amtEur||amtEur<=0) continue;
+
+    // Merchant description: text before the amount, after the user name block
+    // Look for merchant-like text (capitalised words, not dates or numbers)
+    const descMatch=block.match(/\|\s*\*\s*\d{4}\s+(.+?)\s+-\s*\d/);
+    const desc=descMatch?descMatch[1].trim():block.substring(0,80).trim();
+
+    // FX line: e.g. "SEK -125,00" or "SEK 1 = EUR"
+    const fxMatch=block.match(/([A-Z]{3})\s*[-–]\s*(\d{1,5})[,.](\d{2})/);
+    const fxCurrency=fxMatch?fxMatch[1]:null;
+    const fxAmount=fxMatch?parseFloat(fxMatch[2]+'.'+fxMatch[3]):null;
+
+    // Skip if fxCurrency is EUR (that's just restating the charge)
+    if(fxCurrency==='EUR') {
+      transactions.push({date,amtEur,desc,fxAmount:null,fxCurrency:null});
+    } else {
+      transactions.push({date,amtEur,desc,fxAmount,fxCurrency});
+    }
+  }
+
+  console.log('Card statement parsed:',transactions.length,'payment transactions');
+  return {transactions};
 }
 
 function render(){
