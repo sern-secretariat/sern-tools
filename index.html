@@ -322,23 +322,55 @@ async function parseReceipt(file){
 
 async function parseCardStatement(file){
   if(file.type!=="application/pdf") return null;
-  const b64=await fileToB64(file);
-  const controller=new AbortController();
-  const timeout=setTimeout(()=>controller.abort(),55000); // 55s timeout
-  try{
-    const res=await fetch(WORKER_URL,{
-      method:"POST",
-      headers:{"Content-Type":"application/json"},
-      body:JSON.stringify({action:"parseCardStatement", fileData:b64, mediaType:file.type}),
-      signal:controller.signal
+
+  // Load PDF.js if not already loaded
+  if(!window.pdfjsLib){
+    await new Promise((res,rej)=>{
+      const s=document.createElement('script');
+      s.src='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
+      s.onload=()=>{
+        pdfjsLib.GlobalWorkerOptions.workerSrc=
+          'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+        res();
+      };
+      s.onerror=rej;
+      document.head.appendChild(s);
     });
-    const data=await res.json();
-    if(data.error)throw new Error(data.error);
-    console.log('Card statement parsed:',data.transactions?.length,'transactions');
-    return data;
-  }finally{
-    clearTimeout(timeout);
   }
+
+  // Extract text — flat join all items with space to keep rows together
+  // (Soldo rows often split across PDF.js text items but are contiguous in reading order)
+  const arrayBuf=await file.arrayBuffer();
+  const pdf=await pdfjsLib.getDocument({data:arrayBuf}).promise;
+  let fullText='';
+  for(let p=1;p<=pdf.numPages;p++){
+    const page=await pdf.getPage(p);
+    const content=await page.getTextContent({includeMarkedContent:false});
+    fullText+=content.items.map(i=>i.str||'').join(' ')+' ';
+  }
+
+  // Parse Soldo Pagamento rows
+  // Line format: "DD/MM/YY DD/MM/YY Pagamento Category Name | * XXXX Merchant -amt [commission] [SEK -nnn.nn]"
+  const transactions=[];
+  const rowRx=/(\d{2}\/\d{2}\/\d{2})\s+(\d{2}\/\d{2}\/\d{2})\s+Pagamento\s+(.+?)\s+-(\d{1,4}[,\.]\d{2})(?:\s+[\d,\.]+)?\s*(?:(SEK|USD|GBP|NOK|DKK)\s*-\s*(\d{1,5}[,\.]\d{2}))?/g;
+  let m;
+  while((m=rowRx.exec(fullText))!==null){
+    const dp=m[2].split('/');
+    const date='20'+dp[2]+'-'+dp[1]+'-'+dp[0];
+    const amtEur=parseFloat(m[4].replace(',','.'));
+    if(!amtEur||amtEur<=0) continue;
+    let desc=m[3];
+    const panIdx=desc.indexOf('| *');
+    if(panIdx!==-1) desc=desc.substring(panIdx+2).replace(/^\*\s*\d{4}\s*/,'').trim();
+    desc=desc.replace(/\\/g,' ').replace(/\s+/g,' ').trim();
+    const fxCurrency=m[5]||null;
+    const fxAmount=m[6]?parseFloat(m[6].replace(',','.')):null;
+    transactions.push({date,amtEur,desc,fxAmount,fxCurrency});
+  }
+
+  toast('💳 Statement: '+transactions.length+' transactions parsed',3000);
+  console.log('Soldo parsed:',JSON.stringify(transactions));
+  return {transactions};
 }
 
 function render(){
@@ -926,10 +958,11 @@ async function processFiles(){
       cf.status="done";
       cardTransactions=(cs&&cs.transactions)?cs.transactions:[];
       ST.cardTransactions=cardTransactions;
+      toast('💳 Statement: '+cardTransactions.length+' transactions loaded',3000);
     }catch(e){
       console.error("Card statement parse error:",e.message);
       cf.status="error";
-      toast("⚠️ Could not parse card statement — SEK conversion unavailable");
+      toast("⚠️ Card statement failed: "+e.message.substring(0,60));
     }
     r2();
   }
