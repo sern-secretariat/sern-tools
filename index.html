@@ -324,7 +324,7 @@ async function parseCardStatement(file){
     });
   }
 
-  // Extract all text from the PDF
+  // Extract text from all pages
   const arrayBuf=await file.arrayBuffer();
   const pdf=await pdfjsLib.getDocument({data:arrayBuf}).promise;
   let fullText='';
@@ -334,57 +334,53 @@ async function parseCardStatement(file){
     fullText+=content.items.map(i=>i.str).join(' ')+'\n';
   }
 
-  // Parse Soldo statement: extract Pagamento lines
-  // Soldo text layout (per row after PDF extraction):
-  //   DD/MM/YY  DD/MM/YY  Pagamento  Category  Name  Name | * XXXX  Merchant desc  -amt  [commission]  [FX line e.g. SEK -125,00]
-  // Strategy: find all "Pagamento" blocks, extract date + amtEur + desc + optional FX
+  // --- Parse Soldo statement ---
+  // Real text format (from pdfplumber):
+  // "15/06/26 14/06/26 Pagamento Trasporti, Taxi Gravina Federica Gravina | * 0544 Consorzio Taxisti di Parma -63,60"
+  // "17/06/26 16/06/26 Pagamento Cibo, Ristoranti ... KOPPARGRILLEN... -11,69 0,17 SEK -125.00"
+  // FX line may follow: "SEK 1 = EUR 0.0935"
+  // We want: Data operazione (2nd date), amtEur, merchant desc, fxAmount+fxCurrency if present
+
   const transactions=[];
-  // Split into lines and scan
-  const lines=fullText.split(/\n/);
-  const dateRx=/(\d{2}\/\d{2}\/\d{2})/;
-  const amtRx=/-(\d{1,4}[.,]\d{2})\s*$/;          // last negative amount on the token group
-  const fxRx=/([A-Z]{3})\s*[-–]\s*(\d{1,5}[.,]\d{2})/; // e.g. SEK -125,00
 
-  // Concatenate everything into one string and split on "Pagamento"
-  const allText=lines.join(' ');
-  const blocks=allText.split(/Pagamento/);
-  blocks.shift(); // first element is the header before first Pagamento
+  // Match each Pagamento row:
+  // Group 1: Data contabile (DD/MM/YY)
+  // Group 2: Data operazione (DD/MM/YY) — this is the actual transaction date
+  // Group 3: Everything after "Pagamento" up to the EUR amount
+  // Group 4: EUR amount (Italian comma format, e.g. -63,60 or -8,50)
+  // Group 5 (optional): FX amount e.g. SEK -125.00 or SEK -125,00
+  const rowRx=/(\d{2}\/\d{2}\/\d{2})\s+(\d{2}\/\d{2}\/\d{2})\s+Pagamento\s+(.+?)\s+-(\d{1,4}[,\.]\d{2})(?:\s+[\d,\.]+)?\s*(?:([A-Z]{3})\s*-\s*(\d{1,5}[,\.]\d{2}))?/g;
 
-  for(const block of blocks){
-    // Date: first date in the block (Data operazione is second occurrence)
-    const dates=block.match(/(\d{2}\/\d{2}\/\d{2,4})/g);
-    if(!dates||dates.length<1) continue;
-    // Use second date if available (data operazione), else first
-    const rawDate=dates.length>=2?dates[1]:dates[0];
-    const parts=rawDate.split('/');
-    const yr=parts[2].length===2?'20'+parts[2]:parts[2];
-    const date=yr+'-'+parts[1]+'-'+parts[0];
+  let m;
+  while((m=rowRx.exec(fullText))!==null){
+    const rawDate=m[2]; // Data operazione
+    const dp=rawDate.split('/');
+    const date='20'+dp[2]+'-'+dp[1]+'-'+dp[0];
 
-    // EUR amount: look for negative amount pattern
-    const amtMatch=block.match(/-\s*(\d{1,4})[,.](\d{2})(?=\s|$)/);
-    if(!amtMatch) continue;
-    const amtEur=parseFloat(amtMatch[1]+'.'+amtMatch[2]);
+    // EUR amount — replace comma with dot
+    const amtEur=parseFloat(m[4].replace(',','.'));
     if(!amtEur||amtEur<=0) continue;
 
-    // Merchant description: text before the amount, after the user name block
-    // Look for merchant-like text (capitalised words, not dates or numbers)
-    const descMatch=block.match(/\|\s*\*\s*\d{4}\s+(.+?)\s+-\s*\d/);
-    const desc=descMatch?descMatch[1].trim():block.substring(0,80).trim();
-
-    // FX line: e.g. "SEK -125,00" or "SEK 1 = EUR"
-    const fxMatch=block.match(/([A-Z]{3})\s*[-–]\s*(\d{1,5})[,.](\d{2})/);
-    const fxCurrency=fxMatch?fxMatch[1]:null;
-    const fxAmount=fxMatch?parseFloat(fxMatch[2]+'.'+fxMatch[3]):null;
-
-    // Skip if fxCurrency is EUR (that's just restating the charge)
-    if(fxCurrency==='EUR') {
-      transactions.push({date,amtEur,desc,fxAmount:null,fxCurrency:null});
-    } else {
-      transactions.push({date,amtEur,desc,fxAmount,fxCurrency});
+    // Merchant: strip "Gravina Federica Gravina | * 0544 " prefix
+    let desc=m[3];
+    const panIdx=desc.indexOf('| *');
+    if(panIdx!==-1){
+      // Find end of PAN (4 digits after "* ")
+      const afterPan=desc.substring(panIdx+2).replace(/^\*\s*\d{4}\s*/,'');
+      desc=afterPan.trim();
     }
+    // Clean up backslashes and extra spaces
+    desc=desc.replace(/\\/g,' ').replace(/\s+/g,' ').trim();
+
+    // FX fields
+    const fxCurrency=m[5]||null;
+    const fxAmount=m[6]?parseFloat(m[6].replace(',','.')):null;
+
+    transactions.push({date, amtEur, desc, fxAmount, fxCurrency});
   }
 
-  console.log('Card statement parsed:',transactions.length,'payment transactions');
+  console.log('Soldo parsed:',transactions.length,'Pagamento transactions:',
+    transactions.map(t=>t.date+' €'+t.amtEur+(t.fxCurrency?' ('+t.fxAmount+' '+t.fxCurrency+')':'')));
   return {transactions};
 }
 
