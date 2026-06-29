@@ -1095,10 +1095,10 @@ function r3(){
       ?'<div style="padding:8px 12px;border-radius:6px;font-size:12px;background:#FFF3E0;color:#E65100;border-left:3px solid #E65100;font-family:sans-serif">⚠️ Single expense ≥ €300 — attach at least 2 written quotes</div>'
       :'';
     const cardMatchNote=row.cardMatched
-      ?(r.sekAmt
-        ?(r.cardMatchType==='fx'
-          ?'<div style="padding:7px 12px;border-radius:6px;font-size:12px;background:#E8F5E9;color:#2E7D32;border-left:3px solid #2E7D32;font-family:sans-serif">💳 SEK receipt: <strong>'+r.sekAmt.toFixed(2)+' SEK</strong> → <strong>€'+(parseFloat(r.amt)||0).toFixed(2)+'</strong> — converted by Soldo (FX match)</div>'
-          :'<div style="padding:7px 12px;border-radius:6px;font-size:12px;background:#FFF8E1;color:#E65100;border-left:3px solid #F9A825;font-family:sans-serif">💳 SEK receipt: <strong>'+r.sekAmt.toFixed(2)+' SEK</strong> → <strong>€'+(parseFloat(r.amt)||0).toFixed(2)+'</strong> matched by merchant name — <strong>please verify</strong></div>'
+      ?(row.sekAmt
+        ?(row.cardMatchType==='fx'
+          ?'<div style="padding:7px 12px;border-radius:6px;font-size:12px;background:#E8F5E9;color:#2E7D32;border-left:3px solid #2E7D32;font-family:sans-serif">💳 SEK receipt: <strong>'+row.sekAmt.toFixed(2)+' SEK</strong> → <strong>€'+(parseFloat(row.amt)||0).toFixed(2)+'</strong> — converted by Soldo (FX match)</div>'
+          :'<div style="padding:7px 12px;border-radius:6px;font-size:12px;background:#FFF8E1;color:#E65100;border-left:3px solid #F9A825;font-family:sans-serif">💳 SEK receipt: <strong>'+row.sekAmt.toFixed(2)+' SEK</strong> → <strong>€'+(parseFloat(row.amt)||0).toFixed(2)+'</strong> matched by merchant name — <strong>please verify</strong></div>'
         )
         :'<div style="padding:7px 12px;border-radius:6px;font-size:12px;background:#E8F5E9;color:#2E7D32;border-left:3px solid #2E7D32;font-family:sans-serif">💳 Amount confirmed via card statement</div>'
       )
