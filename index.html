@@ -323,54 +323,80 @@ async function parseReceipt(file){
 async function parseCardStatement(file){
   if(file.type!=="application/pdf") return null;
 
-  // Load PDF.js if not already loaded
+  // Load PDF.js once
   if(!window.pdfjsLib){
     await new Promise((res,rej)=>{
       const s=document.createElement('script');
-      const timer=setTimeout(()=>rej(new Error('PDF.js load timeout')),10000);
+      const t=setTimeout(()=>rej(new Error('timeout')),12000);
       s.src='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
-      s.onload=()=>{
-        clearTimeout(timer);
-        pdfjsLib.GlobalWorkerOptions.workerSrc='';
-        res();
-      };
-      s.onerror=()=>{clearTimeout(timer);rej(new Error('PDF.js load failed'));};
+      s.onload=()=>{clearTimeout(t);pdfjsLib.GlobalWorkerOptions.workerSrc='';res();};
+      s.onerror=()=>{clearTimeout(t);rej(new Error('load failed'));};
       document.head.appendChild(s);
     });
   }
 
-  // Extract text — flat join all items with space to keep rows together
-  // (Soldo rows often split across PDF.js text items but are contiguous in reading order)
+  // Extract raw text items WITH their x,y positions
   const arrayBuf=await file.arrayBuffer();
   const pdf=await pdfjsLib.getDocument({data:arrayBuf}).promise;
-  let fullText='';
+  const allItems=[];
   for(let p=1;p<=pdf.numPages;p++){
     const page=await pdf.getPage(p);
+    const vp=page.getViewport({scale:1});
     const content=await page.getTextContent({includeMarkedContent:false});
-    fullText+=content.items.map(i=>i.str||'').join(' ')+' ';
+    content.items.forEach(item=>{
+      if(item.str&&item.str.trim())
+        allItems.push({
+          str:item.str.trim(),
+          x:Math.round(item.transform[4]),
+          // flip y so 0 = top of page
+          y:Math.round(vp.height - item.transform[5]),
+          pg:p
+        });
+    });
   }
 
-  // Parse Soldo Pagamento rows
-  // Line format: "DD/MM/YY DD/MM/YY Pagamento Category Name | * XXXX Merchant -amt [commission] [SEK -nnn.nn]"
+  // Sort all items: page → y (row) → x (column)
+  allItems.sort((a,b)=>a.pg-b.pg||a.y-b.y||a.x-b.x);
+
+  // Group into logical rows by y proximity (items within 4px = same row)
+  const rows=[];
+  let cur=[];
+  allItems.forEach(item=>{
+    if(!cur.length||
+       (item.pg===cur[0].pg && Math.abs(item.y-cur[0].y)<=4)){
+      cur.push(item);
+    } else {
+      if(cur.length) rows.push(cur.map(i=>i.str).join(' '));
+      cur=[item];
+    }
+  });
+  if(cur.length) rows.push(cur.map(i=>i.str).join(' '));
+
+  // Flatten all rows into one string for regex matching
+  const flat=rows.join(' ');
+
+  // Parse Pagamento rows
+  // Pattern: DD/MM/YY DD/MM/YY Pagamento ... -N,NN [commission] [SEK -NNN.NN]
   const transactions=[];
-  const rowRx=/(\d{2}\/\d{2}\/\d{2})\s+(\d{2}\/\d{2}\/\d{2})\s+Pagamento\s+(.+?)\s+-(\d{1,4}[,\.]\d{2})(?:\s+[\d,\.]+)?\s*(?:(SEK|USD|GBP|NOK|DKK)\s*-\s*(\d{1,5}[,\.]\d{2}))?/g;
+  const rx=/(\d{2}\/\d{2}\/\d{2})\s+(\d{2}\/\d{2}\/\d{2})\s+Pagamento\s+(.+?)\s+-(\d{1,4}[,\.]\d{2})(?:\s+[\d,\.]+)?\s*(?:(SEK|USD|GBP|NOK|DKK)\s*-\s*(\d{1,5}[,\.]\d{2}))?/g;
   let m;
-  while((m=rowRx.exec(fullText))!==null){
+  while((m=rx.exec(flat))!==null){
     const dp=m[2].split('/');
     const date='20'+dp[2]+'-'+dp[1]+'-'+dp[0];
     const amtEur=parseFloat(m[4].replace(',','.'));
     if(!amtEur||amtEur<=0) continue;
     let desc=m[3];
-    const panIdx=desc.indexOf('| *');
-    if(panIdx!==-1) desc=desc.substring(panIdx+2).replace(/^\*\s*\d{4}\s*/,'').trim();
+    const pi=desc.indexOf('| *');
+    if(pi!==-1) desc=desc.substring(pi+2).replace(/^\*\s*\d{4}\s*/,'').trim();
     desc=desc.replace(/\\/g,' ').replace(/\s+/g,' ').trim();
     const fxCurrency=m[5]||null;
     const fxAmount=m[6]?parseFloat(m[6].replace(',','.')):null;
     transactions.push({date,amtEur,desc,fxAmount,fxCurrency});
   }
 
-  toast('💳 Statement: '+transactions.length+' transactions parsed',3000);
-  console.log('Soldo parsed:',JSON.stringify(transactions));
+  console.log('Soldo flat text (first 500):', flat.substring(0,500));
+  console.log('Soldo parsed:', JSON.stringify(transactions));
+  toast('💳 Statement: '+transactions.length+' transactions',2500);
   return {transactions};
 }
 
