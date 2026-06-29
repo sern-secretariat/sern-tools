@@ -335,69 +335,36 @@ async function parseCardStatement(file){
     });
   }
 
-  // Extract raw text items WITH their x,y positions
+  // Extract all text from the PDF
   const arrayBuf=await file.arrayBuffer();
   const pdf=await pdfjsLib.getDocument({data:arrayBuf}).promise;
-  const allItems=[];
+  let rawText='';
   for(let p=1;p<=pdf.numPages;p++){
     const page=await pdf.getPage(p);
-    const vp=page.getViewport({scale:1});
-    const content=await page.getTextContent({includeMarkedContent:false});
-    content.items.forEach(item=>{
-      if(item.str&&item.str.trim())
-        allItems.push({
-          str:item.str.trim(),
-          x:Math.round(item.transform[4]),
-          // flip y so 0 = top of page
-          y:Math.round(vp.height - item.transform[5]),
-          pg:p
-        });
+    const content=await page.getTextContent();
+    rawText+=content.items.map(i=>i.str||'').join(' ')+'\n';
+  }
+  console.log('Soldo raw text (500 chars):', rawText.substring(0,500));
+
+  // Send just the TEXT (not the PDF) to the worker — much faster, no timeout risk
+  const controller=new AbortController();
+  const timer=setTimeout(()=>controller.abort(),30000);
+  try{
+    const res=await fetch(WORKER_URL,{
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({action:"parseCardStatementText", text:rawText}),
+      signal:controller.signal
     });
+    const data=await res.json();
+    if(data.error) throw new Error(data.error);
+    const txns=(data.transactions||[]);
+    console.log('Soldo parsed:', JSON.stringify(txns));
+    toast('💳 Statement: '+txns.length+' transactions',2500);
+    return data;
+  }finally{
+    clearTimeout(timer);
   }
-
-  // Sort all items: page → y (row) → x (column)
-  allItems.sort((a,b)=>a.pg-b.pg||a.y-b.y||a.x-b.x);
-
-  // Group into logical rows by y proximity (items within 4px = same row)
-  const rows=[];
-  let cur=[];
-  allItems.forEach(item=>{
-    if(!cur.length||
-       (item.pg===cur[0].pg && Math.abs(item.y-cur[0].y)<=4)){
-      cur.push(item);
-    } else {
-      if(cur.length) rows.push(cur.map(i=>i.str).join(' '));
-      cur=[item];
-    }
-  });
-  if(cur.length) rows.push(cur.map(i=>i.str).join(' '));
-
-  // Flatten all rows into one string for regex matching
-  const flat=rows.join(' ');
-
-  // Parse Pagamento rows
-  // Pattern: DD/MM/YY DD/MM/YY Pagamento ... -N,NN [commission] [SEK -NNN.NN]
-  const transactions=[];
-  const rx=/(\d{2}\/\d{2}\/\d{2})\s+(\d{2}\/\d{2}\/\d{2})\s+Pagamento\s+(.+?)\s+-(\d{1,4}[,\.]\d{2})(?:\s+[\d,\.]+)?\s*(?:(SEK|USD|GBP|NOK|DKK)\s*-\s*(\d{1,5}[,\.]\d{2}))?/g;
-  let m;
-  while((m=rx.exec(flat))!==null){
-    const dp=m[2].split('/');
-    const date='20'+dp[2]+'-'+dp[1]+'-'+dp[0];
-    const amtEur=parseFloat(m[4].replace(',','.'));
-    if(!amtEur||amtEur<=0) continue;
-    let desc=m[3];
-    const pi=desc.indexOf('| *');
-    if(pi!==-1) desc=desc.substring(pi+2).replace(/^\*\s*\d{4}\s*/,'').trim();
-    desc=desc.replace(/\\/g,' ').replace(/\s+/g,' ').trim();
-    const fxCurrency=m[5]||null;
-    const fxAmount=m[6]?parseFloat(m[6].replace(',','.')):null;
-    transactions.push({date,amtEur,desc,fxAmount,fxCurrency});
-  }
-
-  console.log('Soldo flat text (first 500):', flat.substring(0,500));
-  console.log('Soldo parsed:', JSON.stringify(transactions));
-  toast('💳 Statement: '+transactions.length+' transactions',2500);
-  return {transactions};
 }
 
 function render(){
