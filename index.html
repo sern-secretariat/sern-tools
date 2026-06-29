@@ -315,88 +315,23 @@ async function parseReceipt(file){
 
 async function parseCardStatement(file){
   if(file.type!=="application/pdf") return null;
-
-  // Load PDF.js if not already loaded
-  if(!window.pdfjsLib){
-    await new Promise((res,rej)=>{
-      const s=document.createElement('script');
-      s.src='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
-      s.onload=()=>{
-        pdfjsLib.GlobalWorkerOptions.workerSrc=
-          'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
-        res();
-      };
-      s.onerror=rej;
-      document.head.appendChild(s);
+  const b64=await fileToB64(file);
+  const controller=new AbortController();
+  const timeout=setTimeout(()=>controller.abort(),55000); // 55s timeout
+  try{
+    const res=await fetch(WORKER_URL,{
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({action:"parseCardStatement", fileData:b64, mediaType:file.type}),
+      signal:controller.signal
     });
+    const data=await res.json();
+    if(data.error)throw new Error(data.error);
+    console.log('Card statement parsed:',data.transactions?.length,'transactions');
+    return data;
+  }finally{
+    clearTimeout(timeout);
   }
-
-  // Extract text from all pages
-  const arrayBuf=await file.arrayBuffer();
-  const pdf=await pdfjsLib.getDocument({data:arrayBuf}).promise;
-  let fullText='';
-  for(let p=1;p<=pdf.numPages;p++){
-    const page=await pdf.getPage(p);
-    const content=await page.getTextContent();
-    // Join with newline between items to better preserve row structure
-    fullText+=content.items.map(i=>i.str).join('\n')+'\n';
-  }
-
-  // DEBUG: store raw text for inspection
-  window._soldoRawText=fullText;
-  console.log('=== SOLDO RAW TEXT (first 3000 chars) ===');
-  console.log(fullText.substring(0,3000));
-  console.log('==========================================');
-
-  // --- Parse Soldo statement ---
-  // Real text format (from pdfplumber):
-  // "15/06/26 14/06/26 Pagamento Trasporti, Taxi Gravina Federica Gravina | * 0544 Consorzio Taxisti di Parma -63,60"
-  // "17/06/26 16/06/26 Pagamento Cibo, Ristoranti ... KOPPARGRILLEN... -11,69 0,17 SEK -125.00"
-  // FX line may follow: "SEK 1 = EUR 0.0935"
-  // We want: Data operazione (2nd date), amtEur, merchant desc, fxAmount+fxCurrency if present
-
-  const transactions=[];
-
-  // Match each Pagamento row:
-  // Group 1: Data contabile (DD/MM/YY)
-  // Group 2: Data operazione (DD/MM/YY) — this is the actual transaction date
-  // Group 3: Everything after "Pagamento" up to the EUR amount
-  // Group 4: EUR amount (Italian comma format, e.g. -63,60 or -8,50)
-  // Group 5 (optional): FX amount e.g. SEK -125.00 or SEK -125,00
-  const rowRx=/(\d{2}\/\d{2}\/\d{2})\s+(\d{2}\/\d{2}\/\d{2})\s+Pagamento\s+(.+?)\s+-(\d{1,4}[,\.]\d{2})(?:\s+[\d,\.]+)?\s*(?:([A-Z]{3})\s*-\s*(\d{1,5}[,\.]\d{2}))?/g;
-
-  let m;
-  while((m=rowRx.exec(fullText))!==null){
-    const rawDate=m[2]; // Data operazione
-    const dp=rawDate.split('/');
-    const date='20'+dp[2]+'-'+dp[1]+'-'+dp[0];
-
-    // EUR amount — replace comma with dot
-    const amtEur=parseFloat(m[4].replace(',','.'));
-    if(!amtEur||amtEur<=0) continue;
-
-    // Merchant: strip "Gravina Federica Gravina | * 0544 " prefix
-    let desc=m[3];
-    const panIdx=desc.indexOf('| *');
-    if(panIdx!==-1){
-      // Find end of PAN (4 digits after "* ")
-      const afterPan=desc.substring(panIdx+2).replace(/^\*\s*\d{4}\s*/,'');
-      desc=afterPan.trim();
-    }
-    // Clean up backslashes and extra spaces
-    desc=desc.replace(/\\/g,' ').replace(/\s+/g,' ').trim();
-
-    // FX fields
-    const fxCurrency=m[5]||null;
-    const fxAmount=m[6]?parseFloat(m[6].replace(',','.')):null;
-
-    transactions.push({date, amtEur, desc, fxAmount, fxCurrency});
-  }
-
-  console.log('Soldo parsed:',transactions.length,'Pagamento transactions:',
-    transactions.map(t=>t.date+' €'+t.amtEur+(t.fxCurrency?' ('+t.fxAmount+' '+t.fxCurrency+')':'')));
-  toast('🔍 Statement: '+transactions.length+' transactions found — check console for details',4000);
-  return {transactions};
 }
 
 function render(){
@@ -1005,7 +940,6 @@ async function processFiles(){
       // If card statement present, try to match this receipt to a Soldo line
       if(cardTransactions.length && row.date){
         const match = findCardMatch(row.date, row.amt, row.origCur, row.desc, cardTransactions, ST.dateFrom, ST.dateTo);
-        console.log('Match attempt:',row.desc, row.amt, row.origCur, '→', match?('€'+match.amtEur+' ['+match.matchType+']'):'NO MATCH');
         if(match){
           row.sekAmt        = (row.origCur==="SEK") ? row.amt : null;
           row.amt           = match.amtEur;
