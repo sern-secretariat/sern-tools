@@ -338,8 +338,15 @@ async function parseCardStatement(file){
   for(let p=1;p<=pdf.numPages;p++){
     const page=await pdf.getPage(p);
     const content=await page.getTextContent();
-    fullText+=content.items.map(i=>i.str).join(' ')+'\n';
+    // Join with newline between items to better preserve row structure
+    fullText+=content.items.map(i=>i.str).join('\n')+'\n';
   }
+
+  // DEBUG: store raw text for inspection
+  window._soldoRawText=fullText;
+  console.log('=== SOLDO RAW TEXT (first 3000 chars) ===');
+  console.log(fullText.substring(0,3000));
+  console.log('==========================================');
 
   // --- Parse Soldo statement ---
   // Real text format (from pdfplumber):
@@ -388,6 +395,7 @@ async function parseCardStatement(file){
 
   console.log('Soldo parsed:',transactions.length,'Pagamento transactions:',
     transactions.map(t=>t.date+' €'+t.amtEur+(t.fxCurrency?' ('+t.fxAmount+' '+t.fxCurrency+')':'')));
+  toast('🔍 Statement: '+transactions.length+' transactions found — check console for details',4000);
   return {transactions};
 }
 
@@ -997,6 +1005,7 @@ async function processFiles(){
       // If card statement present, try to match this receipt to a Soldo line
       if(cardTransactions.length && row.date){
         const match = findCardMatch(row.date, row.amt, row.origCur, row.desc, cardTransactions, ST.dateFrom, ST.dateTo);
+        console.log('Match attempt:',row.desc, row.amt, row.origCur, '→', match?('€'+match.amtEur+' ['+match.matchType+']'):'NO MATCH');
         if(match){
           row.sekAmt        = (row.origCur==="SEK") ? row.amt : null;
           row.amt           = match.amtEur;
