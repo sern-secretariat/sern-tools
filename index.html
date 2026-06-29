@@ -327,13 +327,14 @@ async function parseCardStatement(file){
   if(!window.pdfjsLib){
     await new Promise((res,rej)=>{
       const s=document.createElement('script');
+      const timer=setTimeout(()=>rej(new Error('PDF.js load timeout')),10000);
       s.src='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
       s.onload=()=>{
-        pdfjsLib.GlobalWorkerOptions.workerSrc=
-          'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+        clearTimeout(timer);
+        pdfjsLib.GlobalWorkerOptions.workerSrc='';
         res();
       };
-      s.onerror=rej;
+      s.onerror=()=>{clearTimeout(timer);rej(new Error('PDF.js load failed'));};
       document.head.appendChild(s);
     });
   }
@@ -958,11 +959,14 @@ async function processFiles(){
       cf.status="done";
       cardTransactions=(cs&&cs.transactions)?cs.transactions:[];
       ST.cardTransactions=cardTransactions;
-      toast('💳 Statement: '+cardTransactions.length+' transactions loaded',3000);
+      if(cardTransactions.length)
+        toast('💳 Statement: '+cardTransactions.length+' transactions parsed',3000);
+      else
+        toast('⚠️ Statement parsed but no transactions found',3000);
     }catch(e){
       console.error("Card statement parse error:",e.message);
       cf.status="error";
-      toast("⚠️ Card statement failed: "+e.message.substring(0,60));
+      toast("⚠️ Statement skipped ("+e.message.substring(0,40)+") — enter EUR amounts manually");
     }
     r2();
   }
