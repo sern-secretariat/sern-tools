@@ -264,25 +264,45 @@ function findCardMatch(date, amt, currency, receiptDesc, transactions, dateFrom,
   // Pass 1 — FX match: statement line has fxCurrency=SEK
   // Fires regardless of receipt currency (AI may return EUR even for SEK receipt)
   // Match: fxAmount ≈ receipt amount (if receipt is SEK) OR amtEur ≈ receipt amount (if receipt is EUR)
-  const fxLines=inRange.filter(t=>t.fxCurrency==="SEK" && t.fxAmount>0);
+  const curr=(currency||"").toString().trim().toUpperCase();
+  const fxLines=inRange.filter(t=>(t.fxCurrency||"").toString().trim().toUpperCase()==="SEK" && t.fxAmount>0);
   if(fxLines.length){
     // If receipt is in SEK, match on fxAmount
-    if(currency==="SEK"){
+    if(curr==="SEK"){
       fxLines.sort((a,b)=>Math.abs((a.fxAmount||0)-amt)-Math.abs((b.fxAmount||0)-amt));
       if(Math.abs((fxLines[0].fxAmount||0)-amt)/(amt||1)<0.05)
         return {...fxLines[0], matchType:'fx'};
     }
-    // If receipt is in EUR, match on amtEur
-    if(currency==="EUR"){
+    // If receipt is in EUR (or unspecified), match on amtEur
+    if(curr==="EUR"||!curr){
       fxLines.sort((a,b)=>Math.abs((a.amtEur||0)-amt)-Math.abs((b.amtEur||0)-amt));
       if(Math.abs((fxLines[0].amtEur||0)-amt)/(amt||1)<0.05)
         return {...fxLines[0], matchType:'fx'};
     }
+    // Currency unclear or doesn't match either way — try both anyway as last resort within FX lines
+    const byFx=[...fxLines].sort((a,b)=>Math.abs((a.fxAmount||0)-amt)-Math.abs((b.fxAmount||0)-amt));
+    const byEur=[...fxLines].sort((a,b)=>Math.abs((a.amtEur||0)-amt)-Math.abs((b.amtEur||0)-amt));
+    if(byFx.length&&Math.abs((byFx[0].fxAmount||0)-amt)/(amt||1)<0.05) return {...byFx[0],matchType:'fx'};
+    if(byEur.length&&Math.abs((byEur[0].amtEur||0)-amt)/(amt||1)<0.05) return {...byEur[0],matchType:'fx'};
+  }
+
+  // Pass 1.5 — Approx rate fallback: AI may have missed fxCurrency/fxAmount fields
+  // for a genuinely SEK receipt. Use typical SEK/EUR rate (~10.5-11) as a loose check
+  // against EUR-only statement lines, combined with name match for confidence.
+  if(curr==="SEK"){
+    const approxEur=amt/10.7; // rough SEK→EUR
+    const rateCandidates=inRange
+      .filter(t=>!t.fxCurrency)
+      .map(t=>({...t, score:nameMatchScore(receiptDesc,t.desc), rateDiff:Math.abs((t.amtEur||0)-approxEur)}))
+      .filter(t=>t.score>=1 && t.rateDiff/(approxEur||1)<0.3)
+      .sort((a,b)=>a.rateDiff-b.rateDiff);
+    if(rateCandidates.length)
+      return {...rateCandidates[0], matchType:'fx'};
   }
 
   // Pass 2 — EUR amount match: statement line has no FX, match EUR amount
   const eurLines=inRange.filter(t=>!t.fxCurrency);
-  if(eurLines.length && currency==="EUR"){
+  if(eurLines.length && (curr==="EUR"||!curr)){
     eurLines.sort((a,b)=>Math.abs((a.amtEur||0)-amt)-Math.abs((b.amtEur||0)-amt));
     if(Math.abs((eurLines[0].amtEur||0)-amt)/(amt||1)<0.02)
       return {...eurLines[0], matchType:'amount'};
@@ -322,9 +342,18 @@ async function parseReceipt(file){
 
 async function parseCardStatement(file){
   if(file.type!=="application/pdf") return null;
+
+  // File size check — Soldo PDFs with many transactions/pages can be large
+  const sizeMB=(file.size/1024/1024).toFixed(2);
+  console.log('Card statement file:',file.name,sizeMB+'MB');
+  if(file.size>8*1024*1024){
+    toast('⚠️ Statement file is large ('+sizeMB+'MB) — this may be slow or fail',4000);
+  }
+
   const b64=await fileToB64(file);
   const controller=new AbortController();
   const timer=setTimeout(()=>controller.abort(),45000);
+  const t0=Date.now();
   try{
     const res=await fetch(WORKER_URL,{
       method:"POST",
@@ -332,12 +361,26 @@ async function parseCardStatement(file){
       body:JSON.stringify({action:"parseCardStatement", fileData:b64, mediaType:file.type}),
       signal:controller.signal
     });
+    const elapsed=((Date.now()-t0)/1000).toFixed(1);
+    console.log('Worker responded in',elapsed+'s, status:',res.status);
+    if(!res.ok){
+      throw new Error('Worker HTTP '+res.status+' after '+elapsed+'s');
+    }
     const data=await res.json();
-    if(data.error) throw new Error(data.error);
+    if(data.error) throw new Error('AI error: '+data.error);
     const txns=data.transactions||[];
     console.log('Statement transactions:', JSON.stringify(txns));
-    toast('💳 Statement: '+txns.length+' transactions',2500);
+    toast('💳 Statement: '+txns.length+' transactions ('+elapsed+'s)',2500);
     return data;
+  }catch(e){
+    const elapsed=((Date.now()-t0)/1000).toFixed(1);
+    if(e.name==='AbortError'){
+      throw new Error('Timed out after '+elapsed+'s — try again or check your connection');
+    }
+    if(e.message&&e.message.includes('fetch')){
+      throw new Error('Network error — could not reach the parsing server. Check internet connection or firewall.');
+    }
+    throw e;
   }finally{
     clearTimeout(timer);
   }
@@ -1266,9 +1309,15 @@ async function calcDistance(dest, empId){
 
 function rKM(){
   const c=document.getElementById("content");
-  const parts=ST.auth.split("-");
+  const parts=ST.auth.toUpperCase().split("-");
   const year=parts[1]||"2026";
   const month=parts[2]||"";
+  // Auto-detect employee from KM auth code (KM-YYYY-MM-COGNOME); fallback keeps Nicola as default
+  if(!ST.emp){
+    const cognome=parts[3];
+    const found=cognome?EMP.find(e=>e.name.toUpperCase()===cognome||e.id.toUpperCase()===cognome):null;
+    ST.emp=found||EMP.find(e=>e.id==="nicola")||EMP[0];
+  }
   const monthName=month?new Date(parseInt(year),parseInt(month)-1,1).toLocaleString("en-GB",{month:"long",year:"numeric"}):"";
   if(!ST.kmRows)ST.kmRows=[{id:1,date:"",dest:"",km:"",notes:""}];
   const rowsHtml=ST.kmRows.map((r,i)=>{
@@ -1409,8 +1458,8 @@ async function buildKMExcel(valid,year,month,monthName,totalKm,totalAmt){
     patchV('J'+r,'');
   }
 
-  putStr('C4',ST.emp.name);
-  putStr('K4',ST.emp.name);
+  putStr('C4',ST.emp?ST.emp.name:'Nicola Catellani');
+  putStr('K4',ST.emp?ST.emp.name:'Nicola Catellani');
   putStr('C5',ST.auth+' — '+monthName);
   putStr('C7',monthName);
   putStr('C8',new Date().toISOString().slice(0,10));
