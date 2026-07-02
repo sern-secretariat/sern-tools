@@ -7,7 +7,7 @@
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:'Georgia',serif;background:#EBF4FB;min-height:100vh;display:flex;justify-content:center}
-#app{max-width:500px;width:100%;min-height:100vh;display:flex;flex-direction:column;background:#fff;box-shadow:0 4px 32px rgba(31,78,121,.18)}
+#app{max-width:900px;width:100%;min-height:100vh;display:flex;flex-direction:column;background:#fff;box-shadow:0 4px 32px rgba(31,78,121,.18)}
 .hdr{background:#1F4E79;padding:15px 18px 11px;position:sticky;top:0;z-index:10}
 .hdr-row{display:flex;align-items:center;gap:10px}
 .logo{width:36px;height:36px;background:#C9A84C;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:700;color:#1F4E79;flex-shrink:0}
@@ -124,7 +124,7 @@ const EMP=[
 ];
 const PROJECTS=["ACCREDITATION 25-26","ACCREDITATION 26-27","ALLIN 26","CARE-GO 26","DATA4MUNI 26","FOOD4FUTURE 26","INTEC 26","RETHINK 26","STRADE FUTURE 26","TRANSMICVET 26"];
 const CATS=["Meals","Flight","Accommodation","Train-bus-taxi","Car rental","Fuel","Telepass","Fees","Other"];
-const CICONS={Meals:"🍽️",Flight:"✈️",Accommodation:"🏨","Train-bus-taxi":"🚆","Car rental":"🚗",Fuel:"⛽",Telepass:"🛣️",Fees:"📋",Other:"📎"};
+const CICONS={Meals:"🍽️",Flight:"✈️",Accommodation:"🏨","Train-bus-taxi":"🚆","Car rental":"🚗",Fuel:"⛽",Telepass:"🛣️",Fees:"📋",Other:"📎","Mileage (KM)":"🚙"};
 // ⚠️ CONFIGURE: paste your Anthropic API key here (never commit to GitHub)
 const ANTHROPIC_API_KEY = "YOUR_ANTHROPIC_API_KEY_HERE";
 
@@ -1027,7 +1027,20 @@ async function processFiles(){
 }
 
 function updRow(id,field,val){
-  ST.rows=dupCheck(ST.rows.map(r=>r.id==id?{...r,[field]:val}:r).map(r=>({...r,isDup:false})));
+  ST.rows=dupCheck(ST.rows.map(r=>{
+    if(r.id!=id)return r;
+    const nr={...r,[field]:val};
+    if(r.isKmRow&&field==="km"){
+      const km=parseFloat(val)||0;
+      nr.roundTripKm=km;
+      if(!nr.rate)nr.rate=0.41; // default ER rate until "Calc" is used
+      nr.amt=parseFloat((km*nr.rate).toFixed(2));
+    }
+    if(r.isKmRow&&field==="dest"&&!r.desc){
+      nr.desc="Mileage — "+val;
+    }
+    return nr;
+  }).map(r=>({...r,isDup:false})));
   r3();
 }
 
@@ -1063,6 +1076,22 @@ function r3(){
   const dupAlert=dups>0
     ?'<div class="alert-warn">⚠️ '+dups+' potential duplicate(s) detected — review below</div>'
     :'';
+  const kmToggleHtml=(ST.emp&&ST.emp.km)
+    ?(()=>{
+        const kmColor=ST.kmApproved?"#1F4E79":"#D1D5DB";
+        const kmBg=ST.kmApproved?"#D6E4F0":"#F7F9FC";
+        const kmBorder=ST.kmApproved?"#1F4E79":"#E8EEF5";
+        const kmLeft=ST.kmApproved?"18px":"2px";
+        const kmTextColor=ST.kmApproved?"#1F4E79":"#4A6880";
+        const kmLabel=ST.kmApproved?"Car use authorized — KM field enabled on rows below":"Car use not authorized for this mission";
+        return '<div style="margin-bottom:11px;display:flex;align-items:center;gap:12px;padding:9px 13px;border:1.5px solid '+kmBorder+';border-radius:7px;background:'+kmBg+';cursor:pointer" id="km-toggle-r3">'
+          +'<div style="width:38px;height:22px;border-radius:11px;background:'+kmColor+';position:relative;flex-shrink:0;transition:background .2s">'
+            +'<div style="width:18px;height:18px;border-radius:50%;background:#fff;position:absolute;top:2px;left:'+kmLeft+';transition:left .2s;box-shadow:0 1px 3px rgba(0,0,0,.2)"></div>'
+          +'</div>'
+          +'<div style="font-size:12px;font-weight:600;color:'+kmTextColor+';font-family:sans-serif">🚗 '+kmLabel+'</div>'
+        +'</div>';
+      })()
+    :'';
   const emptyMsg=!ST.rows.length
     ?'<div style="text-align:center;padding:20px 0;color:#4A6880;font-family:sans-serif;font-size:14px">🧾 No rows yet — add manually or go back</div>'
     :'';
@@ -1086,6 +1115,7 @@ function r3(){
     +'</div>'
     +costAlert
     +dupAlert
+    +kmToggleHtml
     +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:11px">'
       +'<span class="sec-title" style="font-size:16px">Expense Rows</span>'
       +'<span style="background:#1F4E79;color:#fff;font-size:12px;font-weight:600;padding:3px 10px;border-radius:20px;font-family:sans-serif">'+valid.length+' items</span>'
@@ -1093,10 +1123,17 @@ function r3(){
     +emptyMsg
     +'<div id="rc"></div>'
     +'<button class="add-row-btn" id="ar">+ Add manual row</button>'
+    +(ST.kmApproved&&emp.km?'<button class="add-row-btn" id="arkm" style="margin-top:6px">🚙 + Add KM / mileage row</button>':'')
     +totalsHtml;
 
   document.getElementById("ar").onclick=()=>{
     const r={id:ni(),date:"",desc:"",cat:"Other",amt:0,origCur:"EUR",km:"",isDup:false,src:"manual"};
+    ST.rows.push(r);ST.expanded[r.id]=true;r3();
+  };
+  const kt3=document.getElementById("km-toggle-r3");if(kt3)kt3.onclick=()=>{ST.kmApproved=!ST.kmApproved;r3()};
+  const arkm=document.getElementById("arkm");
+  if(arkm)arkm.onclick=()=>{
+    const r={id:ni(),date:"",desc:"",cat:"Mileage (KM)",amt:0,origCur:"EUR",km:"",dest:"",rate:0,isDup:false,src:"manual",isKmRow:true};
     ST.rows.push(r);ST.expanded[r.id]=true;r3();
   };
 
@@ -1132,25 +1169,46 @@ function r3(){
       :'';
     const dupTag=row.isDup?'<span class="dup-tag">DUP</span>':'';
     const X=s=>String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    const kmRateNote=row.rate
+      ?'<div style="font-size:11px;color:#2E7D32;font-family:sans-serif;margin-top:-4px;margin-bottom:6px">'+(row.inER?'🟢 Emilia-Romagna €0.41/km':'🟠 Extra-region €0.22/km')+' → <strong>€'+(parseFloat(row.amt)||0).toFixed(2)+'</strong></div>'
+      :'';
     const bodyHtml=open
-      ?'<div class="exp-row-body">'
-        +'<div class="field"><label class="lbl">Date</label>'
-          +'<input type="date" value="'+X(row.date)+'" data-id="'+row.id+'" data-f="date"></div>'
-        +'<div class="field"><label class="lbl">Description</label>'
-          +'<input type="text" value="'+X(row.desc)+'" placeholder="Merchant / service" data-id="'+row.id+'" data-f="desc"></div>'
-        +'<div class="field"><label class="lbl">Category</label>'
-          +'<select data-id="'+row.id+'" data-f="cat">'+catOpts+'</select></div>'
-        +'<div class="field"><label class="lbl">Amount (EUR)</label>'
-          +'<input type="number" step="0.01" value="'+row.amt+'" data-id="'+row.id+'" data-f="amt"></div>'
-        +kmField
-        +cardMatchNote
-        +over300Warn
-        +dupWarn
-        +'<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:2px">'
-          +keepBtn
-          +'<button class="btn-del" data-del="'+row.id+'">🗑 Delete</button>'
+      ?(row.isKmRow
+        ?'<div class="exp-row-body">'
+          +'<div class="field"><label class="lbl">Date</label>'
+            +'<input type="date" value="'+X(row.date)+'" data-id="'+row.id+'" data-f="date"></div>'
+          +'<div class="field"><label class="lbl">Destination</label>'
+            +'<input type="text" value="'+X(row.dest||'')+'" placeholder="e.g. Bologna" data-id="'+row.id+'" data-f="dest"></div>'
+          +'<div style="display:flex;gap:8px;align-items:flex-end">'
+            +'<div class="field" style="flex:1;margin-bottom:0"><label class="lbl">KM (round trip)</label>'
+              +'<input type="number" step="1" value="'+(row.km||'')+'" placeholder="e.g. 142" data-id="'+row.id+'" data-f="km"></div>'
+            +'<button data-kmcalc="'+row.id+'" style="padding:9px 12px;background:#1F4E79;color:#fff;border:none;border-radius:6px;font-size:12px;cursor:pointer;font-family:sans-serif;white-space:nowrap;height:38px;margin-bottom:0">'+(row.calculating?'⏳':'📍 Calc KM')+'</button>'
+          +'</div>'
+          +kmRateNote
+          +dupWarn
+          +'<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:2px">'
+            +keepBtn
+            +'<button class="btn-del" data-del="'+row.id+'">🗑 Delete</button>'
+          +'</div>'
         +'</div>'
-      +'</div>'
+        :'<div class="exp-row-body">'
+          +'<div class="field"><label class="lbl">Date</label>'
+            +'<input type="date" value="'+X(row.date)+'" data-id="'+row.id+'" data-f="date"></div>'
+          +'<div class="field"><label class="lbl">Description</label>'
+            +'<input type="text" value="'+X(row.desc)+'" placeholder="Merchant / service" data-id="'+row.id+'" data-f="desc"></div>'
+          +'<div class="field"><label class="lbl">Category</label>'
+            +'<select data-id="'+row.id+'" data-f="cat">'+catOpts+'</select></div>'
+          +'<div class="field"><label class="lbl">Amount (EUR)</label>'
+            +'<input type="number" step="0.01" value="'+row.amt+'" data-id="'+row.id+'" data-f="amt"></div>'
+          +kmField
+          +cardMatchNote
+          +over300Warn
+          +dupWarn
+          +'<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:2px">'
+            +keepBtn
+            +'<button class="btn-del" data-del="'+row.id+'">🗑 Delete</button>'
+          +'</div>'
+        +'</div>')
       :'';
     d.innerHTML=
       '<div class="exp-row-head">'
@@ -1170,6 +1228,25 @@ function r3(){
     if(db)db.onclick=e=>{e.stopPropagation();ST.rows=dupCheck(ST.rows.filter(r=>r.id!=db.dataset.del).map(r=>({...r,isDup:false})));r3()};
     const kb=d.querySelector("[data-keep]");
     if(kb)kb.onclick=e=>{e.stopPropagation();ST.rows=ST.rows.map(r=>r.id==kb.dataset.keep?{...r,isDup:false}:r);r3()};
+    const kcb=d.querySelector("[data-kmcalc]");
+    if(kcb)kcb.onclick=async e=>{
+      e.stopPropagation();
+      const rid=kcb.dataset.kmcalc;
+      const target=ST.rows.find(rr=>rr.id==rid);
+      if(!target||!target.dest)return toast("⚠️ Enter destination first");
+      ST.rows=ST.rows.map(r=>r.id==rid?{...r,calculating:true}:r);r3();
+      const result=await calcDistance(target.dest,ST.emp.id);
+      if(!result||result.error){
+        ST.rows=ST.rows.map(r=>r.id==rid?{...r,calculating:false}:r);
+        toast("⚠️ Could not calculate — enter KM manually");r3();return;
+      }
+      ST.rows=dupCheck(ST.rows.map(r=>r.id==rid?{
+        ...r,calculating:false,km:result.roundTripKm,roundTripKm:result.roundTripKm,
+        inER:result.inER,rate:result.rate,amt:result.amount,
+        desc:"Mileage — "+(result.destName||target.dest)
+      }:r).map(r=>({...r,isDup:false})));
+      r3();
+    };
     rc.appendChild(d);
   });
   }catch(e){
@@ -1248,7 +1325,7 @@ async function buildExcel(emp,valid,total,catT){
   const CAT_NO_KM={Flight:'D',Accommodation:'E','Train-bus-taxi':'F',Meals:'G',Fees:'H',Telepass:'I',Fuel:'I','Car rental':'I',Other:'I'};
   const CAT_KM={Flight:'D',Accommodation:'E','Train-bus-taxi':'F',Meals:'G',Fees:'H',Telepass:'K',Fuel:'K','Car rental':'L',Other:'L'};
   const CAT=useKM?CAT_KM:CAT_NO_KM;
-  const catSums={D:0,E:0,F:0,G:0,H:0,I:0};
+  const catSums={D:0,E:0,F:0,G:0,H:0,I:0,J:0,K:0,L:0};
 
   valid.forEach((row,i)=>{
     const r=12+i;
@@ -1264,14 +1341,22 @@ async function buildExcel(emp,valid,total,catT){
       if(row.src)xml=xml.replace(cRx(rcptCol+r),'<c r="'+rcptCol+r+'" s="'+S[rcptCol]+'" t="inlineStr"><is><t>'+X(row.src)+'</t></is></c>');
       if(row.notes)xml=xml.replace(cRx(notesCol+r),'<c r="'+notesCol+r+'" s="'+S[notesCol]+'" t="inlineStr"><is><t>'+X(row.notes)+'</t></is></c>');
       patchV('L'+r,amt);
-    } else {
+    } else if(row.isKmRow){
+      // Mileage row: KM goes in column I, and the reimbursable EUR amount (KM × rate,
+      // using the ER €0.41 or extra-region €0.22 rate resolved via Calc KM) goes in J.
       const km=parseInt(row.km)||0;
       if(km>0)xml=xml.replace(cRx('I'+r),'<c r="I'+r+'" s="'+S.I+'" t="n"><v>'+km+'</v></c>');
-      const tp=parseFloat(row.telepass)||0;
-      if(tp>0)xml=xml.replace(cRx('K'+r),'<c r="K'+r+'" s="'+S.K+'" t="n"><v>'+tp+'</v></c>');
+      const kmAmt=parseFloat((km*(row.rate||0.41)).toFixed(2));
+      patchV('J'+r,kmAmt);
+      catSums.J=(catSums.J||0)+kmAmt;
       if(row.src)xml=xml.replace(cRx('M'+r),'<c r="M'+r+'" s="'+S.M+'" t="inlineStr"><is><t>'+X(row.src)+'</t></is></c>');
       if(row.notes)xml=xml.replace(cRx('N'+r),'<c r="N'+r+'" s="'+S.N+'" t="inlineStr"><is><t>'+X(row.notes)+'</t></is></c>');
-      patchV('J'+r,parseFloat((km*0.41).toFixed(2)));
+    } else {
+      // Regular expense row on a KM-template mission — still needs its own amount written,
+      // otherwise it silently disappears from the export once any mileage row triggers useKM.
+      if(amt>0){xml=xml.replace(cRx(col+r),'<c r="'+col+r+'" s="'+(S[col]||S.L)+'" t="n"><v>'+amt+'</v></c>');catSums[col]=(catSums[col]||0)+amt;}
+      if(row.src)xml=xml.replace(cRx('M'+r),'<c r="M'+r+'" s="'+S.M+'" t="inlineStr"><is><t>'+X(row.src)+'</t></is></c>');
+      if(row.notes)xml=xml.replace(cRx('N'+r),'<c r="N'+r+'" s="'+S.N+'" t="inlineStr"><is><t>'+X(row.notes)+'</t></is></c>');
     }
   });
 
@@ -1281,6 +1366,11 @@ async function buildExcel(emp,valid,total,catT){
     // Update TOTAL row cached values
     ['D','E','F','G','H','I'].forEach(c=>patchV(c+'27',catSums[c]||0));
     patchV('L27',total);
+  } else {
+    // Update TOTAL row cached values for the KM template too (D-L). patchV() is a no-op
+    // on any column that has no SUM formula in this template, so this is safe either way.
+    for(let r=12+valid.length;r<=25;r++)patchV('J'+r,'');
+    ['D','E','F','G','H','I','J','K','L'].forEach(c=>patchV(c+'27',catSums[c]||0));
   }
 
   const filename=(ST.auth||'expense')+'_'+emp.name.split(' ').pop()+'_expenses.xlsx';
@@ -1309,15 +1399,9 @@ async function calcDistance(dest, empId){
 
 function rKM(){
   const c=document.getElementById("content");
-  const parts=ST.auth.toUpperCase().split("-");
+  const parts=ST.auth.split("-");
   const year=parts[1]||"2026";
   const month=parts[2]||"";
-  // Auto-detect employee from KM auth code (KM-YYYY-MM-COGNOME); fallback keeps Nicola as default
-  if(!ST.emp){
-    const cognome=parts[3];
-    const found=cognome?EMP.find(e=>e.name.toUpperCase()===cognome||e.id.toUpperCase()===cognome):null;
-    ST.emp=found||EMP.find(e=>e.id==="nicola")||EMP[0];
-  }
   const monthName=month?new Date(parseInt(year),parseInt(month)-1,1).toLocaleString("en-GB",{month:"long",year:"numeric"}):"";
   if(!ST.kmRows)ST.kmRows=[{id:1,date:"",dest:"",km:"",notes:""}];
   const rowsHtml=ST.kmRows.map((r,i)=>{
@@ -1325,7 +1409,7 @@ function rKM(){
     const amtLabel=r.amount?(" = <strong>€"+r.amount.toFixed(2)+"</strong>"):"";
     const calcStatus=r.calculating?"⏳ Calculating...":r.destName?('<span style="font-size:11px;color:#2E7D32">'+rateLabel+' · '+r.roundTripKm+'km RT'+amtLabel+'</span>'):"";
     return '<div style="background:#F7F9FC;border:1.5px solid #E8EEF5;border-radius:8px;padding:10px;margin-bottom:8px">'
-      +'<div style="display:grid;grid-template-columns:110px 80px 1fr 65px 65px 30px;gap:5px;margin-bottom:6px;align-items:center">'
+      +'<div style="display:grid;grid-template-columns:130px 170px 1fr 80px 80px 34px;gap:5px;margin-bottom:6px;align-items:center">'
         +'<input type="date" value="'+r.date+'" data-i="'+i+'" data-f="date" style="padding:7px;border:1.5px solid #E8EEF5;border-radius:6px;font-size:12px;font-family:sans-serif;outline:none;background:#fff">'
         +'<input type="text" placeholder="Notes / purpose" value="'+r.notes+'" data-i="'+i+'" data-f="notes" style="padding:7px;border:1.5px solid #E8EEF5;border-radius:6px;font-size:12px;font-family:sans-serif;outline:none;background:#fff">'
         +'<input type="text" placeholder="Destination" value="'+r.dest+'" title="'+r.dest+'" data-i="'+i+'" data-f="dest" style="padding:7px;border:1.5px solid #E8EEF5;border-radius:6px;font-size:12px;font-family:sans-serif;outline:none;background:#fff">'
@@ -1349,7 +1433,7 @@ function rKM(){
     '<div class="sec-title">Monthly KM Reimbursement</div>'
     +'<div class="sec-sub">'+ST.auth+(monthName?" — "+monthName:"")+'</div>'
     +'<div style="background:#fff;border:1.5px solid #E8EEF5;border-radius:10px;padding:14px;margin-bottom:14px">'
-      +'<div style="display:grid;grid-template-columns:110px 80px 1fr 65px 65px 30px;gap:5px;margin-bottom:8px">'
+      +'<div style="display:grid;grid-template-columns:130px 170px 1fr 80px 80px 34px;gap:5px;margin-bottom:8px">'
         +'<div style="font-size:11px;font-weight:700;color:#4A6880;font-family:sans-serif;text-transform:uppercase">Date</div>'
         +'<div style="font-size:11px;font-weight:700;color:#4A6880;font-family:sans-serif;text-transform:uppercase">Notes / Purpose</div>'
         +'<div style="font-size:11px;font-weight:700;color:#4A6880;font-family:sans-serif;text-transform:uppercase">Destination</div>'
@@ -1458,8 +1542,8 @@ async function buildKMExcel(valid,year,month,monthName,totalKm,totalAmt){
     patchV('J'+r,'');
   }
 
-  putStr('C4',ST.emp?ST.emp.name:'Nicola Catellani');
-  putStr('K4',ST.emp?ST.emp.name:'Nicola Catellani');
+  putStr('C4',ST.emp.name);
+  putStr('K4',ST.emp.name);
   putStr('C5',ST.auth+' — '+monthName);
   putStr('C7',monthName);
   putStr('C8',new Date().toISOString().slice(0,10));
