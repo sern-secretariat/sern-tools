@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
-<title>SERN Mission Expense Tool — 2026-08-31.1</title>
+<title>SERN Mission Expense Tool — 2026-08-31.2</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:'Georgia',serif;background:#EBF4FB;min-height:100vh;display:flex;justify-content:center}
@@ -114,7 +114,7 @@ const BASE_ADDRESSES={
   federica: "Sorbolo, Parma, Italy"
 };
 
-const APP_VERSION="2026-08-31.1";
+const APP_VERSION="2026-08-31.2";
 const EMP=[
   {id:"nicola",  name:"Nicola Catellani",        email:"nicola.catellani@sern.eu",          base:"Reggio Emilia",    card:"unicredit_2139", km:true,  tpl:"KM"},
   {id:"ginevra", name:"Ginevra Roli",             email:"ginevra.roli@sern.eu",              base:"Scandiano RE",     card:"soldo_ginevra",  km:true,  tpl:"KM"},
@@ -1346,13 +1346,15 @@ function rKM(){
     const amtLabel=r.amount?(" = <strong>€"+r.amount.toFixed(2)+"</strong>"):"";
     const calcStatus=r.calculating?"⏳ Calculating...":r.destName?('<span style="font-size:11px;color:#2E7D32">'+rateLabel+' · '+r.roundTripKm+'km RT'+amtLabel+'</span>'):"";
     return '<div style="background:#F7F9FC;border:1.5px solid #E8EEF5;border-radius:8px;padding:10px;margin-bottom:8px">'
-      +'<div style="display:grid;grid-template-columns:110px 80px 1fr 65px 65px 30px;gap:5px;margin-bottom:6px;align-items:center">'
-        +'<input type="date" value="'+r.date+'" data-i="'+i+'" data-f="date" style="padding:7px;border:1.5px solid #E8EEF5;border-radius:6px;font-size:12px;font-family:sans-serif;outline:none;background:#fff">'
-        +'<input type="text" placeholder="Notes / purpose" value="'+r.notes+'" data-i="'+i+'" data-f="notes" style="padding:7px;border:1.5px solid #E8EEF5;border-radius:6px;font-size:12px;font-family:sans-serif;outline:none;background:#fff">'
-        +'<input type="text" placeholder="Destination" value="'+r.dest+'" title="'+r.dest+'" data-i="'+i+'" data-f="dest" style="padding:7px;border:1.5px solid #E8EEF5;border-radius:6px;font-size:12px;font-family:sans-serif;outline:none;background:#fff">'
-        +'<input type="number" placeholder="KM" value="'+(r.roundTripKm||r.km||'')+'" data-i="'+i+'" data-f="km" style="padding:7px;border:1.5px solid #E8EEF5;border-radius:6px;font-size:12px;font-family:sans-serif;outline:none;background:#fff;text-align:center">'
-        +'<input type="number" placeholder="€" value="'+(r.telepass||'')+'" data-i="'+i+'" data-f="telepass" style="padding:7px;border:1.5px solid #E8EEF5;border-radius:6px;font-size:12px;font-family:sans-serif;outline:none;background:#fff;text-align:center">'
+      +'<div style="display:grid;grid-template-columns:1fr 30px;gap:5px;margin-bottom:5px;align-items:center">'
+        +'<input type="text" placeholder="Destination (e.g. Parma, Bologna Airport)" value="'+r.dest+'" title="'+r.dest+'" data-i="'+i+'" data-f="dest" style="padding:8px;border:1.5px solid #E8EEF5;border-radius:6px;font-size:12px;font-family:sans-serif;outline:none;background:#fff;width:100%;box-sizing:border-box">'
         +'<button data-del="'+i+'" style="width:28px;height:28px;background:#FEE2E2;border:none;border-radius:6px;cursor:pointer;font-size:14px;color:#DC2626">×</button>'
+      +'</div>'
+      +'<input type="text" placeholder="Purpose / justification (column N of the form)" value="'+r.notes+'" title="'+r.notes+'" data-i="'+i+'" data-f="notes" style="padding:8px;border:1.5px solid #E8EEF5;border-radius:6px;font-size:12px;font-family:sans-serif;outline:none;background:#fff;width:100%;box-sizing:border-box;margin-bottom:5px">'
+      +'<div style="display:grid;grid-template-columns:1fr 78px 78px;gap:5px;margin-bottom:6px;align-items:center">'
+        +'<input type="date" value="'+r.date+'" data-i="'+i+'" data-f="date" style="padding:8px;border:1.5px solid #E8EEF5;border-radius:6px;font-size:12px;font-family:sans-serif;outline:none;background:#fff;width:100%;box-sizing:border-box">'
+        +'<input type="number" placeholder="KM RT" value="'+(r.roundTripKm||r.km||'')+'" data-i="'+i+'" data-f="km" style="padding:8px;border:1.5px solid #E8EEF5;border-radius:6px;font-size:12px;font-family:sans-serif;outline:none;background:#fff;width:100%;box-sizing:border-box;text-align:center">'
+        +'<input type="number" placeholder="Telep. €" value="'+(r.telepass||'')+'" data-i="'+i+'" data-f="telepass" style="padding:8px;border:1.5px solid #E8EEF5;border-radius:6px;font-size:12px;font-family:sans-serif;outline:none;background:#fff;width:100%;box-sizing:border-box;text-align:center">'
       +'</div>'
       +'<div style="display:flex;gap:6px;align-items:center;justify-content:space-between">'
         +'<button data-calc="'+i+'" style="padding:6px 14px;background:#1F4E79;color:#fff;border:none;border-radius:6px;font-size:12px;cursor:pointer;font-family:sans-serif;white-space:nowrap">📍 Calc KM</button>'
@@ -1371,14 +1373,7 @@ function rKM(){
     +'<div class="sec-sub">'+ST.auth+(monthName?" — "+monthName:"")+'</div>'
     +empHtml
     +'<div style="background:#fff;border:1.5px solid #E8EEF5;border-radius:10px;padding:14px;margin-bottom:14px">'
-      +'<div style="display:grid;grid-template-columns:110px 80px 1fr 65px 65px 30px;gap:5px;margin-bottom:8px">'
-        +'<div style="font-size:11px;font-weight:700;color:#4A6880;font-family:sans-serif;text-transform:uppercase">Date</div>'
-        +'<div style="font-size:11px;font-weight:700;color:#4A6880;font-family:sans-serif;text-transform:uppercase">Notes / Purpose</div>'
-        +'<div style="font-size:11px;font-weight:700;color:#4A6880;font-family:sans-serif;text-transform:uppercase">Destination</div>'
-        +'<div style="font-size:11px;font-weight:700;color:#4A6880;font-family:sans-serif;text-transform:uppercase">KM RT</div>'
-        +'<div style="font-size:11px;font-weight:700;color:#4A6880;font-family:sans-serif;text-transform:uppercase">Telepass</div>'
-        +'<div></div>'
-      +'</div>'
+      +'<div style="font-size:11px;font-weight:700;color:#4A6880;font-family:sans-serif;text-transform:uppercase;margin-bottom:8px">Trips</div>'
       +rowsHtml
       +'<button id="km-add" style="width:100%;padding:9px;background:#F0F5FB;border:1.5px dashed #9AAFC5;border-radius:7px;font-size:13px;color:#1F4E79;cursor:pointer;font-family:sans-serif;margin-top:4px">+ Add trip</button>'
     +'</div>'
@@ -1500,15 +1495,32 @@ async function buildKMExcel(valid,year,month,monthName,totalKm,totalAmt){
     const km=r.roundTripKm||parseInt(r.km)||0;
     const tp=parseFloat(r.telepass)||0;
     if(r.date)xml=xml.replace(cRx('B'+row),'<c r="B'+row+'" s="'+S.B+'" t="inlineStr"><is><t>'+X(r.date)+'</t></is></c>');
-    xml=xml.replace(cRx('C'+row),'<c r="C'+row+'" s="'+S.C+'" t="inlineStr"><is><t>'+X(r.dest+(r.notes?' — '+r.notes:''))+'</t></is></c>');
+    xml=xml.replace(cRx('C'+row),'<c r="C'+row+'" s="'+S.C+'" t="inlineStr"><is><t>'+X(r.dest)+'</t></is></c>');
+    if(r.notes)xml=xml.replace(cRx('N'+row),'<c r="N'+row+'" s="'+S.N+'" t="inlineStr"><is><t>'+X(r.notes)+'</t></is></c>');
     if(km>0)xml=xml.replace(cRx('I'+row),'<c r="I'+row+'" s="'+S.I+'" t="n"><v>'+km+'</v></c>');
     if(tp>0)xml=xml.replace(cRx('K'+row),'<c r="K'+row+'" s="'+S.K+'" t="n"><v>'+tp+'</v></c>');
     patchV('J'+row,parseFloat((km*0.41).toFixed(2)));
   });
 
-  // Update formula caches for KM totals
-  patchV('K6',parseFloat(totalAmt));
-  patchV('K7',valid.reduce((s,r)=>s+(parseFloat(r.telepass)||0),0));
+  // K6 = Total cost of mission  -> SUM(O12:O25)   (was O12:O200, which swallowed the TOTAL row 27)
+  // K7 = Total KM reimbursement -> SUM(J12:J25)   (was J12:J200, same double-count)
+  const setF=(a,f,v)=>{
+    xml=xml.replace(new RegExp('(<c r="'+a+'"[^>]*>)<f[^>]*>[^<]*<\\/f>(?:<v>[^<]*<\\/v>)?'),
+      '$1<f aca="false">'+f+'</f><v>'+v+'</v>');
+  };
+  const kmAmt=valid.reduce((s,r)=>s+parseFloat(((r.roundTripKm||parseInt(r.km)||0)*0.41).toFixed(2)),0);
+  const tpAmt=valid.reduce((s,r)=>s+(parseFloat(r.telepass)||0),0);
+  setF('K6','SUM(O12:O25)',parseFloat((kmAmt+tpAmt).toFixed(2)));
+  setF('K7','SUM(J12:J25)',parseFloat(kmAmt.toFixed(2)));
+
+  // Force Excel to recalculate all formula caches on open (row 27 and column O)
+  let wbXml=await zip.file('xl/workbook.xml').async('string');
+  if(/<calcPr[^>]*\/>/.test(wbXml)){
+    wbXml=wbXml.replace(/<calcPr([^>]*?)\s*\/>/,(m,attrs)=>'<calcPr'+attrs.replace(/\s*fullCalcOnLoad="[^"]*"/,'')+' fullCalcOnLoad="1"/>');
+  }else{
+    wbXml=wbXml.replace('</workbook>','<calcPr fullCalcOnLoad="1"/></workbook>');
+  }
+  zip.file('xl/workbook.xml',wbXml);
 
   const filename=ST.auth+'_mileage_report.xlsx';
   zip.file('xl/worksheets/sheet1.xml',xml);
