@@ -395,7 +395,7 @@ function renderStep3(){
       <div class="lbl" style="margin-bottom:6px">📎 Receipts to attach</div>
       ${receiptNames.map(n=>`<div class="receipt-item"><span style="font-size:16px">${n.endsWith('.pdf')?'📄':'🖼️'}</span><span class="receipt-item-name">${n}</span></div>`).join('')}
     </div>` : ''}
-    <div class="alert-info">📧 Outlook will open with the email already written. Attach the downloaded Excel${hasReceipts ? ' + your receipts' : ''} and hit Send.</div>`;
+    <div class="alert-info">📧 Outlook will open with the email already written. Go to your Downloads folder, open the Excel, sign it and save as PDF, then attach the PDF${hasReceipts ? ' + your receipts' : ''} and hit Send.</div>`;
 
   footer.innerHTML = `
     <div class="btn-row" style="margin-bottom:8px">
@@ -406,73 +406,289 @@ function renderStep3(){
 
 // ─── EXCEL GENERATION ─────────────────────────────────────────────────────
 function generateExcel(){
-  const emp = EMP.find(e=>e.id===state.employee);
+  const emp   = EMP.find(e=>e.id===state.employee);
   const total = state.rows.reduce((s,r)=>s+(parseFloat(r.amount)||0), 0);
   const today = state.submittedDate;
+  const ref   = `GER-${state.employee.toUpperCase()}-${today.replace(/-/g,'')}`;
 
-  // Header block
-  const headerRows = [
-    ["SERN — General Expense Reimbursement Form"],
-    [],
-    ["Employee", emp.name, "", "Date Submitted", today],
-    ["Role",     emp.role, "", "Form Reference", `GER-${state.employee.toUpperCase()}-${today.replace(/-/g,'')}`],
-    [],
-    ["#", "Category", "Date / Period", "Description", "Notes", "Amount (€)"],
-  ];
+  // ── colour palette (ARGB) ──────────────────────────────────────────────
+  const C = {
+    DARK_BLUE  : 'FF1F4E79',
+    GOLD       : 'FFC9A84C',
+    GOLD_DARK  : 'FF9A7A1C',
+    LIGHT_BLUE : 'FFEBF4FB',
+    MED_BLUE   : 'FFD6E4F0',
+    WHITE      : 'FFFFFFFF',
+    TEXT_DARK  : 'FF1A2E42',
+    TEXT_MED   : 'FF4A6880',
+    BORDER     : 'FFBDD4E7',
+  };
 
-  const dataRows = state.rows.map((r,i)=>{
-    const catObj = CATS.find(c=>c.id===r.cat);
-    const isTC = r.cat==='traincard';
-    const periodStr = isTC
-      ? (r.periodFrom && r.periodTo ? `${r.periodFrom} → ${r.periodTo}` : r.periodFrom||r.periodTo||'')
-      : r.date;
-    return [
-      i+1,
-      catObj ? catObj.label.replace(/^.{2}/,'').trim() : r.cat,
-      periodStr,
-      r.desc,
-      r.notes || '',
-      parseFloat(r.amount)||0
-    ];
+  // ── style presets ─────────────────────────────────────────────────────
+  const border = (col) => ({
+    top:    {style:'thin', color:{argb:col||C.BORDER}},
+    bottom: {style:'thin', color:{argb:col||C.BORDER}},
+    left:   {style:'thin', color:{argb:col||C.BORDER}},
+    right:  {style:'thin', color:{argb:col||C.BORDER}},
   });
 
-  const footerRows = [
-    [],
-    ["", "", "", "", "TOTAL", total],
-    [],
-    ["Notes / Justification", "", "", "", "", ""],
-    [],
-    [],
-    [],
-    ["Employee signature", "", "", "Approved by (Network Coordinator)", "", ""],
-    [],
-    ["Date", "", "", "Date", "", ""],
-    [],
-    ["_____________________________", "", "", "_____________________________", "", ""],
+  const sTitle = {
+    fill: {patternType:'solid', fgColor:{argb:C.DARK_BLUE}},
+    font: {bold:true, sz:14, color:{argb:C.WHITE}, name:'Georgia'},
+    alignment: {horizontal:'center', vertical:'center'},
+  };
+  const sSubtitle = {
+    fill: {patternType:'solid', fgColor:{argb:C.DARK_BLUE}},
+    font: {italic:true, sz:9, color:{argb:'FFA8C8E8'}, name:'Calibri'},
+    alignment: {horizontal:'center', vertical:'center'},
+  };
+  const sInfoLabel = {
+    fill: {patternType:'solid', fgColor:{argb:C.MED_BLUE}},
+    font: {bold:true, sz:9, color:{argb:C.DARK_BLUE}, name:'Calibri'},
+    alignment: {horizontal:'left', vertical:'center'},
+    border: border(),
+  };
+  const sInfoVal = {
+    fill: {patternType:'solid', fgColor:{argb:C.LIGHT_BLUE}},
+    font: {sz:10, color:{argb:C.TEXT_DARK}, name:'Calibri'},
+    alignment: {horizontal:'left', vertical:'center'},
+    border: border(),
+  };
+  const sColHdr = {
+    fill: {patternType:'solid', fgColor:{argb:C.DARK_BLUE}},
+    font: {bold:true, sz:9, color:{argb:C.WHITE}, name:'Calibri'},
+    alignment: {horizontal:'center', vertical:'center', wrapText:true},
+    border: border(C.DARK_BLUE),
+  };
+  const sColHdrRight = Object.assign({}, sColHdr, {alignment:{horizontal:'right', vertical:'center'}});
+  const sDataEven = {
+    fill: {patternType:'solid', fgColor:{argb:C.WHITE}},
+    font: {sz:10, color:{argb:C.TEXT_DARK}, name:'Calibri'},
+    alignment: {horizontal:'left', vertical:'center', wrapText:true},
+    border: border(),
+  };
+  const sDataOdd = Object.assign({}, sDataEven, {fill:{patternType:'solid', fgColor:{argb:C.LIGHT_BLUE}}});
+  const sDataNum = (even) => Object.assign({}, even ? sDataEven : sDataOdd, {alignment:{horizontal:'right', vertical:'center'}});
+  const sDataIdx = (even) => Object.assign({}, even ? sDataEven : sDataOdd, {alignment:{horizontal:'center', vertical:'center'}, font:{sz:9, color:{argb:C.TEXT_MED}, name:'Calibri'}});
+  const sTotalLabel = {
+    fill: {patternType:'solid', fgColor:{argb:C.GOLD}},
+    font: {bold:true, sz:11, color:{argb:'FF163A5A'}, name:'Calibri'},
+    alignment: {horizontal:'right', vertical:'center'},
+    border: border(C.GOLD),
+  };
+  const sTotalVal = {
+    fill: {patternType:'solid', fgColor:{argb:C.GOLD}},
+    font: {bold:true, sz:13, color:{argb:'FF0D2137'}, name:'Georgia'},
+    alignment: {horizontal:'right', vertical:'center'},
+    border: border(C.GOLD),
+  };
+  const sSigLabel = {
+    fill: {patternType:'solid', fgColor:{argb:C.MED_BLUE}},
+    font: {bold:true, sz:9, color:{argb:C.DARK_BLUE}, name:'Calibri'},
+    alignment: {horizontal:'center', vertical:'center'},
+    border: border(),
+  };
+  const sSigLine = {
+    fill: {patternType:'solid', fgColor:{argb:C.WHITE}},
+    font: {sz:10, color:{argb:C.BORDER}, name:'Calibri'},
+    alignment: {horizontal:'center', vertical:'bottom'},
+    border: {bottom:{style:'medium', color:{argb:C.DARK_BLUE}}},
+  };
+  const sBlank = {fill:{patternType:'solid', fgColor:{argb:C.WHITE}}};
+  const sNoteLabel = {
+    fill: {patternType:'solid', fgColor:{argb:C.LIGHT_BLUE}},
+    font: {bold:true, sz:9, color:{argb:C.DARK_BLUE}, name:'Calibri'},
+    alignment: {horizontal:'left', vertical:'center'},
+    border: border(),
+  };
+  const sNoteArea = {
+    fill: {patternType:'solid', fgColor:{argb:C.WHITE}},
+    border: border(),
+  };
+
+  // ── helper: write one cell ────────────────────────────────────────────
+  const ws = {};
+  const sc = (col, row, v, s, type) => {
+    const addr = XLSX.utils.encode_cell({c:col, r:row});
+    const t = type !== undefined ? type : (typeof v === 'number' ? 'n' : 's');
+    ws[addr] = {v: v ?? '', t, s: s || {}};
+  };
+  // fill an entire row with a style (blank content)
+  const fillRow = (row, fromCol, toCol, s) => {
+    for(let c=fromCol; c<=toCol; c++) sc(c, row, '', s);
+  };
+
+  // ── layout ────────────────────────────────────────────────────────────
+  let r = 0;
+
+  // Row 0 — Main title
+  sc(0, r, 'SERN — General Expense Reimbursement Form', sTitle);
+  for(let c=1;c<=5;c++) sc(c, r, '', sTitle);
+
+  // Row 1 — Sub-title / tagline
+  r++;
+  sc(0, r, 'Non-Mission General Reimbursement', sSubtitle);
+  for(let c=1;c<=5;c++) sc(c, r, '', sSubtitle);
+
+  // Row 2 — blank spacer
+  r++;
+  fillRow(r, 0, 5, sBlank);
+
+  // Row 3 — Employee / Date row
+  r++;
+  sc(0, r, 'Employee', sInfoLabel);
+  sc(1, r, emp.name, sInfoVal);
+  sc(2, r, '', sInfoVal);
+  sc(3, r, 'Date Submitted', sInfoLabel);
+  sc(4, r, today, sInfoVal);
+  sc(5, r, '', sInfoVal);
+
+  // Row 4 — Role / Reference row
+  r++;
+  sc(0, r, 'Role', sInfoLabel);
+  sc(1, r, emp.role, sInfoVal);
+  sc(2, r, '', sInfoVal);
+  sc(3, r, 'Form Reference', sInfoLabel);
+  sc(4, r, ref, sInfoVal);
+  sc(5, r, '', sInfoVal);
+
+  // Row 5 — blank spacer
+  r++;
+  fillRow(r, 0, 5, sBlank);
+
+  // Row 6 — Column headers
+  r++;
+  const hdrR = r;
+  sc(0, r, '#',            sColHdr);
+  sc(1, r, 'Category',     sColHdr);
+  sc(2, r, 'Date / Period',sColHdr);
+  sc(3, r, 'Description',  sColHdr);
+  sc(4, r, 'Notes',        sColHdr);
+  sc(5, r, 'Amount (€)',   sColHdrRight);
+
+  // Data rows
+  r++;
+  const dataStartR = r;
+  state.rows.forEach((row, i) => {
+    const catObj  = CATS.find(c=>c.id===row.cat);
+    const isTC    = row.cat==='traincard';
+    const period  = isTC
+      ? (row.periodFrom && row.periodTo ? `${row.periodFrom} → ${row.periodTo}` : row.periodFrom||row.periodTo||'')
+      : row.date;
+    const catLabel = catObj ? catObj.label.replace(/^.{2}/,'').trim() : row.cat;
+    const even = (i % 2 === 0);
+    sc(0, r, i+1,                    sDataIdx(even),    'n');
+    sc(1, r, catLabel,               even ? sDataEven : sDataOdd);
+    sc(2, r, period,                 even ? sDataEven : sDataOdd);
+    sc(3, r, row.desc,               even ? sDataEven : sDataOdd);
+    sc(4, r, row.notes||'',          even ? sDataEven : sDataOdd);
+    sc(5, r, parseFloat(row.amount)||0, sDataNum(even), 'n');
+    r++;
+  });
+
+  // Blank row before total
+  fillRow(r, 0, 5, sBlank);
+  r++;
+
+  // Total row
+  const totalR = r;
+  sc(0, r, '', sTotalLabel);
+  sc(1, r, '', sTotalLabel);
+  sc(2, r, '', sTotalLabel);
+  sc(3, r, '', sTotalLabel);
+  sc(4, r, 'TOTAL', sTotalLabel);
+  sc(5, r, total, sTotalVal, 'n');
+  r++;
+
+  // Blank row
+  fillRow(r, 0, 5, sBlank); r++;
+
+  // Receipts note (if any)
+  if(state.receipts.length > 0) {
+    sc(0, r, 'Receipts attached:', sNoteLabel);
+    sc(1, r, state.receipts.map(rc=>rc.name).join(' | '), sNoteArea);
+    for(let c=2;c<=5;c++) sc(c, r, '', sNoteArea);
+    r++;
+    fillRow(r, 0, 5, sBlank); r++;
+  }
+
+  // Notes / Justification label
+  sc(0, r, 'Notes / Justification', sNoteLabel);
+  for(let c=1;c<=5;c++) sc(c, r, '', sNoteArea);
+  r++;
+  // Three blank lines for handwritten notes
+  for(let line=0;line<3;line++){
+    fillRow(r, 0, 5, sNoteArea); r++;
+  }
+
+  // Blank spacer
+  fillRow(r, 0, 5, sBlank); r++;
+  fillRow(r, 0, 5, sBlank); r++;
+
+  // Signature block — labels row
+  const sigLabelR = r;
+  sc(0, r, 'Employee', sSigLabel);
+  sc(1, r, emp.name, sSigLabel);
+  sc(2, r, '', sSigLabel);
+  sc(3, r, 'Approved by', sSigLabel);
+  sc(4, r, 'Nicola Catellani — Network Coordinator', sSigLabel);
+  sc(5, r, '', sSigLabel);
+  r++;
+
+  // Date row
+  sc(0, r, 'Date:', sInfoLabel);
+  sc(1, r, '', sInfoVal); sc(2, r, '', sInfoVal);
+  sc(3, r, 'Date:', sInfoLabel);
+  sc(4, r, '', sInfoVal); sc(5, r, '', sInfoVal);
+  r++;
+
+  // Signature line row
+  sc(0, r, '', sSigLine); sc(1, r, 'Signature', sSigLine); sc(2, r, '', sSigLine);
+  sc(3, r, '', sSigLine); sc(4, r, 'Signature', sSigLine); sc(5, r, '', sSigLine);
+  r++;
+
+  const lastR = r - 1;
+
+  // ── sheet metadata ────────────────────────────────────────────────────
+  ws['!ref'] = XLSX.utils.encode_range({s:{r:0,c:0}, e:{r:lastR,c:5}});
+
+  ws['!cols'] = [
+    {wch:5}, {wch:22}, {wch:18}, {wch:34}, {wch:24}, {wch:14}
   ];
 
-  const allRows = [...headerRows, ...dataRows, ...footerRows];
+  // Row heights (in points)
+  ws['!rows'] = [];
+  ws['!rows'][0]    = {hpt:32}; // Title
+  ws['!rows'][1]    = {hpt:14}; // Sub-title
+  ws['!rows'][hdrR] = {hpt:22}; // Column headers
+  ws['!rows'][totalR] = {hpt:26}; // Total
+  for(let i=0;i<state.rows.length;i++) ws['!rows'][dataStartR+i] = {hpt:18};
+
+  ws['!merges'] = [
+    // Title + subtitle span all columns
+    {s:{r:0,c:0}, e:{r:0,c:5}},
+    {s:{r:1,c:0}, e:{r:1,c:5}},
+    // Info block — value cells span 2 cols each
+    {s:{r:3,c:1}, e:{r:3,c:2}},
+    {s:{r:3,c:4}, e:{r:3,c:5}},
+    {s:{r:4,c:1}, e:{r:4,c:2}},
+    {s:{r:4,c:4}, e:{r:4,c:5}},
+    // Total label spans cols 0–4
+    {s:{r:totalR,c:0}, e:{r:totalR,c:4}},
+    // Signature label rows
+    {s:{r:sigLabelR,c:1}, e:{r:sigLabelR,c:2}},
+    {s:{r:sigLabelR,c:4}, e:{r:sigLabelR,c:5}},
+    {s:{r:sigLabelR+1,c:1}, e:{r:sigLabelR+1,c:2}},
+    {s:{r:sigLabelR+1,c:4}, e:{r:sigLabelR+1,c:5}},
+    {s:{r:sigLabelR+2,c:1}, e:{r:sigLabelR+2,c:2}},
+    {s:{r:sigLabelR+2,c:4}, e:{r:sigLabelR+2,c:5}},
+  ];
 
   const wb = XLSX.utils.book_new();
-  const ws = XLSX.utils.aoa_to_sheet(allRows);
-
-  // Column widths
-  ws['!cols'] = [
-    {wch:4}, {wch:28}, {wch:16}, {wch:38}, {wch:30}, {wch:14}
-  ];
-
-  // Merge title cell
-  ws['!merges'] = [
-    {s:{r:0,c:0}, e:{r:0,c:5}},           // Title
-    {s:{r:7,c:0}, e:{r:7,c:5}},           // Notes label
-    {s:{r:9,c:1}, e:{r:9,c:2}},           // Sig left
-    {s:{r:9,c:3}, e:{r:9,c:5}},           // Sig right
-  ];
-
-  XLSX.utils.book_append_sheet(wb, ws, "Reimbursement");
+  XLSX.utils.book_append_sheet(wb, ws, 'Reimbursement');
 
   const fileName = `GER_${emp.name.replace(/\s/g,'_')}_${today}.xlsx`;
-  XLSX.writeFile(wb, fileName);
+  XLSX.writeFile(wb, fileName, {cellStyles:true});
   return fileName;
 }
 
