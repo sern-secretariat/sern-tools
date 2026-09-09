@@ -1,0 +1,578 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>SERN General Expense Tool</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Georgia',serif;background:#EBF4FB;min-height:100vh;display:flex;justify-content:center}
+#app{max-width:500px;width:100%;min-height:100vh;display:flex;flex-direction:column;background:#fff;box-shadow:0 4px 32px rgba(31,78,121,.18)}
+.hdr{background:#1F4E79;padding:15px 18px 11px;position:sticky;top:0;z-index:10}
+.hdr-row{display:flex;align-items:center;gap:10px}
+.logo{width:36px;height:36px;background:#C9A84C;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:700;color:#1F4E79;flex-shrink:0}
+.hdr-title{font-size:17px;font-weight:700;color:#fff}
+.hdr-sub{font-size:10px;color:#A8C8E8;text-transform:uppercase;letter-spacing:.06em;margin-top:2px;font-family:sans-serif}
+.steps{display:flex;background:#1F4E79;padding:10px 18px 14px}
+.step-item{flex:1;display:flex;flex-direction:column;align-items:center;position:relative}
+.step-item:not(:last-child)::after{content:'';position:absolute;top:13px;left:50%;width:100%;height:2px;background:rgba(255,255,255,.2);z-index:0}
+.step-item.done:not(:last-child)::after{background:#C9A84C}
+.step-circle{width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;position:relative;z-index:1;border:2px solid rgba(255,255,255,.22);color:rgba(255,255,255,.4);background:rgba(255,255,255,.1);font-family:sans-serif}
+.step-item.active .step-circle{background:#C9A84C;border-color:#C9A84C;color:#1F4E79;box-shadow:0 0 0 3px rgba(201,168,76,.3)}
+.step-item.done .step-circle{background:#C9A84C;border-color:#C9A84C;color:#1F4E79}
+.step-label{font-size:9px;color:rgba(255,255,255,.35);margin-top:5px;text-transform:uppercase;letter-spacing:.06em;font-family:sans-serif}
+.step-item.active .step-label{color:#C9A84C}
+.step-item.done .step-label{color:rgba(255,255,255,.65)}
+.content{flex:1;padding:18px;overflow-y:auto}
+.footer{padding:14px 18px;border-top:1px solid #E8EEF5;background:#fff;position:sticky;bottom:0}
+.sec-title{font-size:18px;font-weight:700;color:#1F4E79;margin-bottom:4px}
+.sec-sub{font-size:13px;color:#4A6880;margin-bottom:16px;line-height:1.5;font-family:sans-serif}
+.field{margin-bottom:14px}
+.lbl{display:block;font-size:10px;font-weight:700;color:#2D6A9F;text-transform:uppercase;letter-spacing:.07em;margin-bottom:5px;font-family:sans-serif}
+.req{color:#C9A84C}
+input[type=text],input[type=date],input[type=number],input[type=month],select,textarea{width:100%;padding:10px 12px;border:1.5px solid #E8EEF5;border-radius:6px;font-family:sans-serif;font-size:14px;color:#1A2E42;background:#fff;outline:none;appearance:none;-webkit-appearance:none}
+textarea{resize:vertical;min-height:60px}
+input:focus,select:focus,textarea:focus{border-color:#2D6A9F;box-shadow:0 0 0 3px rgba(45,106,159,.12)}
+.emp-grid{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-bottom:14px}
+.emp-card{border:2px solid #E8EEF5;border-radius:10px;padding:11px 9px;cursor:pointer;text-align:center;background:#fff;transition:.15s all}
+.emp-card:hover{border-color:#A8C8E8;background:#EBF4FB}
+.emp-card.sel{border-color:#1F4E79;background:#D6E4F0}
+.emp-name{font-size:13px;font-weight:700;color:#1F4E79;line-height:1.3}
+.btn-primary{width:100%;padding:13px;background:#1F4E79;color:#fff;border:none;border-radius:7px;font-size:14px;font-weight:600;cursor:pointer;font-family:sans-serif}
+.btn-primary:disabled{opacity:.5;cursor:not-allowed}
+.btn-secondary{flex:1;padding:12px;background:#fff;color:#1F4E79;border:2px solid #1F4E79;border-radius:7px;font-size:14px;font-weight:600;cursor:pointer;font-family:sans-serif}
+.btn-accent{width:100%;padding:13px;background:#C9A84C;color:#163A5A;border:none;border-radius:7px;font-size:14px;font-weight:700;cursor:pointer;font-family:sans-serif;margin-top:10px}
+.btn-row{display:flex;gap:10px}
+.btn-add{width:100%;padding:11px;background:#EBF4FB;color:#1F4E79;border:2px dashed #A8C8E8;border-radius:7px;font-size:13px;font-weight:600;cursor:pointer;font-family:sans-serif;margin-top:4px}
+.btn-add:hover{background:#D6E4F0;border-color:#1F4E79}
+.exp-row{border:1.5px solid #E8EEF5;border-radius:9px;margin-bottom:10px;overflow:hidden;background:#fff;box-shadow:0 1px 4px rgba(0,0,0,.04)}
+.exp-row-head{display:flex;align-items:center;gap:7px;padding:9px 11px;background:#F7F9FC;border-bottom:1px solid #E8EEF5}
+.row-num{width:22px;height:22px;background:#1F4E79;color:#fff;border-radius:50%;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-family:sans-serif}
+.row-summary{flex:1;font-size:13px;font-weight:500;color:#1A2E42;font-family:sans-serif}
+.row-amt{font-size:15px;font-weight:700;color:#1F4E79;flex-shrink:0}
+.row-del{width:24px;height:24px;background:#FFEBEE;border-radius:50%;border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0;color:#C62828}
+.exp-row-body{padding:12px;display:flex;flex-direction:column;gap:9px}
+.totals-bar{background:#D6E4F0;border-radius:9px;padding:13px 15px;margin-bottom:14px}
+.t-row{display:flex;justify-content:space-between;align-items:center;padding:5px 0;font-size:13px;color:#4A6880;border-bottom:1px solid #A8C8E8;font-family:sans-serif}
+.t-row:last-child{border-bottom:none}
+.t-total{font-size:16px;font-weight:700;color:#1F4E79;padding-top:8px;font-family:Georgia,serif}
+.summ-card{background:#1F4E79;border-radius:10px;padding:13px 15px;margin-bottom:14px;color:#fff}
+.s-label{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:#A8C8E8;margin-bottom:2px;font-family:sans-serif}
+.s-val{font-size:15px;font-weight:700}
+.s-grid{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-top:10px}
+.s-item{background:rgba(255,255,255,.09);border-radius:7px;padding:9px}
+.cat-pill{display:inline-block;font-size:10px;font-weight:700;padding:2px 8px;border-radius:20px;font-family:sans-serif;background:#F5EDD4;color:#9A7A1C;margin-bottom:8px}
+.cat-pill.traincard{background:#E8F5E9;color:#1B5E20}
+.cat-pill.profdev{background:#E3F2FD;color:#0D47A1}
+.cat-pill.supplies{background:#FFF8E1;color:#E65100}
+.cat-pill.phone{background:#F3E5F5;color:#4A148C}
+.cat-pill.other{background:#F5F5F5;color:#424242}
+.drop-zone{border:2px dashed #A8C8E8;border-radius:10px;padding:18px 14px;text-align:center;background:#EBF4FB;cursor:pointer;margin-bottom:10px}
+.drop-zone:hover{border-color:#1F4E79;background:#D6E4F0}
+.receipt-item{display:flex;align-items:center;gap:9px;padding:8px 11px;border:1.5px solid #E8EEF5;border-radius:7px;background:#fff;margin-bottom:6px;font-family:sans-serif}
+.receipt-item-name{flex:1;font-size:13px;color:#1A2E42;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.receipt-item-size{font-size:11px;color:#4A6880;flex-shrink:0}
+.receipt-del{width:22px;height:22px;background:#FFEBEE;border-radius:50%;border:none;cursor:pointer;font-size:13px;color:#C62828;flex-shrink:0}
+.alert-info{padding:9px 13px;border-radius:6px;font-size:13px;margin-bottom:11px;display:flex;gap:8px;align-items:flex-start;background:#D6E4F0;color:#1F4E79;border-left:3px solid #2D6A9F;font-family:sans-serif}
+.toast{position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:#1F4E79;color:#fff;padding:10px 20px;border-radius:25px;font-size:13px;font-weight:500;box-shadow:0 4px 20px rgba(31,78,121,.3);z-index:9999;white-space:nowrap;font-family:sans-serif;opacity:0;transition:opacity .3s;pointer-events:none}
+.success-icon{font-size:48px;text-align:center;margin:20px 0}
+.success-title{font-size:20px;font-weight:700;color:#1F4E79;text-align:center;margin-bottom:8px}
+.success-sub{font-size:13px;color:#4A6880;text-align:center;font-family:sans-serif;line-height:1.6;margin-bottom:20px}
+</style>
+</head>
+<body>
+<div id="app">
+  <div class="hdr">
+    <div class="hdr-row">
+      <div class="logo">S</div>
+      <div>
+        <div class="hdr-title">SERN Expense Tool</div>
+        <div class="hdr-sub">General Reimbursement (Non-Mission)</div>
+      </div>
+    </div>
+  </div>
+  <div class="steps" id="steps-bar"></div>
+  <div class="content" id="content"></div>
+  <div class="footer" id="footer"></div>
+  <div class="toast" id="toast"></div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script>
+// ─── CONFIG ───────────────────────────────────────────────────────────────
+// Email address that receives approval requests
+const COORDINATOR_EMAIL = "nicola.catellani@sern.eu";
+
+const EMP = [
+  {id:"nicola",   name:"Nicola Catellani",  role:"Network Coordinator"},
+  {id:"ginevra",  name:"Ginevra Roli",       role:"Project Officer"},
+  {id:"laura",    name:"Laura Avanzi",        role:"Project Officer"},
+  {id:"federica", name:"Federica Gravina",   role:"Project Officer"},
+  {id:"alessia",  name:"Alessia Mereu",      role:"Project Officer"},
+  {id:"nanna",    name:"Nanna Mikkelsen",    role:"Project Officer"},
+];
+
+const CATS = [
+  {id:"traincard", label:"🚆 Transport Card",  pill:"traincard"},
+  {id:"supplies",  label:"🖊️ Office Supplies", pill:"supplies"},
+  {id:"other",     label:"📎 Other",            pill:"other"},
+];
+
+// ─── STATE ────────────────────────────────────────────────────────────────
+let state = { step:1, employee:null, rows:[], receipts:[], submittedDate: new Date().toISOString().split('T')[0] };
+let nextRowId = 1;
+
+// ─── STEPS ────────────────────────────────────────────────────────────────
+const STEPS = [
+  {n:1, label:"Who"},
+  {n:2, label:"Expenses"},
+  {n:3, label:"Review"},
+];
+
+function renderSteps(){
+  const bar = document.getElementById('steps-bar');
+  bar.innerHTML = STEPS.map(s=>{
+    const cls = s.n < state.step ? 'done' : s.n === state.step ? 'active' : '';
+    const icon = s.n < state.step ? '✓' : s.n;
+    return `<div class="step-item ${cls}"><div class="step-circle">${icon}</div><div class="step-label">${s.label}</div></div>`;
+  }).join('');
+}
+
+// ─── STEP 1: Employee ─────────────────────────────────────────────────────
+function renderStep1(){
+  const content = document.getElementById('content');
+  const footer  = document.getElementById('footer');
+  content.innerHTML = `
+    <div class="sec-title">Who is claiming?</div>
+    <div class="sec-sub">Select the employee submitting this reimbursement request.</div>
+    <div class="emp-grid">
+      ${EMP.map(e=>`
+        <div class="emp-card${state.employee===e.id?' sel':''}" onclick="selEmp('${e.id}')">
+          <div class="emp-name">${e.name}</div>
+        </div>`).join('')}
+    </div>`;
+  footer.innerHTML = `<button class="btn-primary" id="next1" onclick="goStep2()" ${state.employee?'':'disabled'}>Continue →</button>`;
+}
+
+function selEmp(id){
+  state.employee = id;
+  document.querySelectorAll('.emp-card').forEach(c=>c.classList.remove('sel'));
+  event.currentTarget.classList.add('sel');
+  document.getElementById('next1').disabled = false;
+}
+
+function goStep2(){
+  if(!state.employee) return;
+  state.step = 2;
+  if(state.rows.length === 0) addEmptyRow();
+  render();
+}
+
+// ─── STEP 2: Expenses ─────────────────────────────────────────────────────
+function addEmptyRow(){
+  const today = new Date().toISOString().split('T')[0];
+  state.rows.push({id: nextRowId++, cat:'', date: today, desc:'', periodFrom:'', periodTo:'', amount:'', notes:''});
+}
+
+function renderStep2(){
+  const content = document.getElementById('content');
+  const footer  = document.getElementById('footer');
+  const emp = EMP.find(e=>e.id===state.employee);
+
+  content.innerHTML = `
+    <div class="sec-title">Add Expenses</div>
+    <div class="sec-sub">Enter each cost you are requesting reimbursement for, then attach your receipts below.</div>
+    <div id="rows-container">${state.rows.map(r=>renderRowHTML(r)).join('')}</div>
+    <button class="btn-add" onclick="addRow()">＋ Add another expense</button>
+    ${state.rows.length>0 ? renderTotalsBar() : ''}
+    <div style="margin-top:18px">
+      <div class="lbl" style="margin-bottom:6px">📎 Receipts / Invoices <span style="color:#4A6880;font-weight:400;text-transform:none">(attach all supporting documents)</span></div>
+      <div class="drop-zone" onclick="document.getElementById('receipt-input').click()" ondragover="event.preventDefault()" ondrop="handleDrop(event)">
+        <div style="font-size:22px;margin-bottom:6px">📄</div>
+        <div style="font-size:13px;font-weight:600;color:#1F4E79;font-family:sans-serif">Tap to select receipts</div>
+        <div style="font-size:11px;color:#4A6880;margin-top:3px;font-family:sans-serif">PDF, JPG, PNG — drag & drop or tap</div>
+      </div>
+      <input type="file" id="receipt-input" multiple accept=".pdf,.jpg,.jpeg,.png,.heic,.webp" style="display:none" onchange="handleFiles(this.files)">
+      <div id="receipt-list">${renderReceiptList()}</div>
+    </div>`;
+
+  footer.innerHTML = `
+    <div class="btn-row">
+      <button class="btn-secondary" onclick="goBack(2)">← Back</button>
+      <button class="btn-primary" id="next2" onclick="goStep3()" ${canProceed2()?'':'disabled'}>Review →</button>
+    </div>`;
+}
+
+function renderRowHTML(row){
+  const catObj = CATS.find(c=>c.id===row.cat);
+  const isTrainCard = row.cat === 'traincard';
+  return `
+  <div class="exp-row" id="row-${row.id}">
+    <div class="exp-row-head">
+      <div class="row-num">${state.rows.indexOf(row)+1}</div>
+      <div class="row-summary">${catObj ? catObj.label : 'New expense'}</div>
+      <div class="row-amt">${row.amount ? '€'+parseFloat(row.amount).toFixed(2) : '—'}</div>
+      ${state.rows.length>1 ? `<button class="row-del" onclick="delRow(${row.id})" title="Remove">×</button>` : ''}
+    </div>
+    <div class="exp-row-body">
+      <div class="field">
+        <label class="lbl">Category <span class="req">*</span></label>
+        <select onchange="updateRow(${row.id},'cat',this.value)">
+          <option value="">— select —</option>
+          ${CATS.map(c=>`<option value="${c.id}"${row.cat===c.id?' selected':''}>${c.label}</option>`).join('')}
+        </select>
+      </div>
+      ${isTrainCard ? `
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:9px">
+        <div class="field">
+          <label class="lbl">From <span class="req">*</span></label>
+          <input type="month" value="${row.periodFrom||''}" onchange="updateRow(${row.id},'periodFrom',this.value)">
+        </div>
+        <div class="field">
+          <label class="lbl">To <span class="req">*</span></label>
+          <input type="month" value="${row.periodTo||''}" onchange="updateRow(${row.id},'periodTo',this.value)">
+        </div>
+      </div>
+      <div class="field">
+        <label class="lbl">Route / Subscription description <span class="req">*</span></label>
+        <input type="text" value="${row.desc||''}" onchange="updateRow(${row.id},'desc',this.value)" placeholder="e.g. Reggio Emilia ↔ Bologna annual pass">
+      </div>
+      ` : `
+      <div class="field">
+        <label class="lbl">Date <span class="req">*</span></label>
+        <input type="date" value="${row.date||''}" onchange="updateRow(${row.id},'date',this.value)">
+      </div>
+      <div class="field">
+        <label class="lbl">Description <span class="req">*</span></label>
+        <input type="text" value="${row.desc||''}" onchange="updateRow(${row.id},'desc',this.value)" placeholder="Brief description of the expense">
+      </div>
+      `}
+      <div class="field">
+        <label class="lbl">Amount (€) <span class="req">*</span></label>
+        <input type="number" min="0" step="0.01" value="${row.amount||''}" onchange="updateRow(${row.id},'amount',this.value)" placeholder="0.00">
+      </div>
+      <div class="field">
+        <label class="lbl">Notes (optional)</label>
+        <textarea onchange="updateRow(${row.id},'notes',this.value)" placeholder="Any notes for the approver…">${row.notes||''}</textarea>
+      </div>
+    </div>
+  </div>`;
+}
+
+function renderTotalsBar(){
+  const total = state.rows.reduce((s,r)=>s+(parseFloat(r.amount)||0), 0);
+  const byCat = {};
+  state.rows.forEach(r=>{
+    if(!r.cat || !r.amount) return;
+    const catObj = CATS.find(c=>c.id===r.cat);
+    const lbl = catObj ? catObj.label.replace(/^.{2}/,'').trim() : r.cat;
+    byCat[lbl] = (byCat[lbl]||0) + (parseFloat(r.amount)||0);
+  });
+  const catRows = Object.entries(byCat).map(([l,v])=>`<div class="t-row"><span>${l}</span><span>€${v.toFixed(2)}</span></div>`).join('');
+  return `<div class="totals-bar" style="margin-top:14px">${catRows}<div class="t-row t-total"><span>TOTAL</span><span>€${total.toFixed(2)}</span></div></div>`;
+}
+
+function updateRow(id, field, value){
+  const row = state.rows.find(r=>r.id===id);
+  if(!row) return;
+  row[field] = value;
+  // Re-render rows container only for efficiency
+  document.getElementById('rows-container').innerHTML = state.rows.map(r=>renderRowHTML(r)).join('');
+  // update totals
+  const old = document.querySelector('.totals-bar');
+  if(old) old.outerHTML = renderTotalsBar();
+  else {
+    const btn = document.querySelector('.btn-add');
+    if(btn && state.rows.length>0) btn.insertAdjacentHTML('afterend', renderTotalsBar());
+  }
+  document.getElementById('next2').disabled = !canProceed2();
+}
+
+function addRow(){
+  addEmptyRow();
+  renderStep2();
+  // scroll to new row
+  setTimeout(()=>{
+    const last = document.getElementById('rows-container').lastElementChild;
+    if(last) last.scrollIntoView({behavior:'smooth', block:'start'});
+  }, 80);
+}
+
+function delRow(id){
+  state.rows = state.rows.filter(r=>r.id!==id);
+  if(state.rows.length===0) addEmptyRow();
+  renderStep2();
+}
+
+function canProceed2(){
+  return state.rows.every(r=>{
+    if(!r.cat || !r.amount || parseFloat(r.amount)<=0) return false;
+    if(r.cat==='traincard') return !!r.periodFrom && !!r.periodTo && !!r.desc;
+    return !!r.desc;
+  }) && state.rows.length > 0;
+}
+
+function goStep3(){
+  if(!canProceed2()) return;
+  state.step = 3;
+  render();
+}
+
+// ─── RECEIPT HANDLING ─────────────────────────────────────────────────────
+function handleFiles(files){
+  Array.from(files).forEach(f=>{
+    if(!state.receipts.find(r=>r.name===f.name))
+      state.receipts.push({name:f.name, size:f.size, file:f});
+  });
+  document.getElementById('receipt-list').innerHTML = renderReceiptList();
+}
+function handleDrop(e){
+  e.preventDefault();
+  handleFiles(e.dataTransfer.files);
+}
+function removeReceipt(name){
+  state.receipts = state.receipts.filter(r=>r.name!==name);
+  document.getElementById('receipt-list').innerHTML = renderReceiptList();
+}
+function renderReceiptList(){
+  if(!state.receipts.length) return '';
+  return state.receipts.map(r=>`
+    <div class="receipt-item">
+      <span style="font-size:18px">${r.name.endsWith('.pdf')?'📄':'🖼️'}</span>
+      <span class="receipt-item-name">${r.name}</span>
+      <span class="receipt-item-size">${(r.size/1024).toFixed(0)} KB</span>
+      <button class="receipt-del" onclick="removeReceipt('${r.name.replace(/'/g,"\\'")}')" title="Remove">×</button>
+    </div>`).join('');
+}
+
+// ─── STEP 3: Review ───────────────────────────────────────────────────────
+function renderStep3(){
+  const content = document.getElementById('content');
+  const footer  = document.getElementById('footer');
+  const emp = EMP.find(e=>e.id===state.employee);
+  const total = state.rows.reduce((s,r)=>s+(parseFloat(r.amount)||0), 0);
+
+  const rowsHTML = state.rows.map((r,i)=>{
+    const catObj = CATS.find(c=>c.id===r.cat);
+    const isTC = r.cat==='traincard';
+    const dateLabel = isTC
+      ? (r.periodFrom && r.periodTo ? `${r.periodFrom} → ${r.periodTo}` : r.periodFrom||r.periodTo||'')
+      : (r.date||'');
+    return `
+    <div style="border:1.5px solid #E8EEF5;border-radius:9px;padding:11px 13px;margin-bottom:9px;background:#F7F9FC">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+        <div style="display:flex;align-items:center;gap:7px">
+          <div class="row-num">${i+1}</div>
+          <span class="cat-pill ${catObj?.pill||''}">${catObj?.label||r.cat}</span>
+        </div>
+        <span style="font-size:16px;font-weight:700;color:#1F4E79">€${parseFloat(r.amount).toFixed(2)}</span>
+      </div>
+      <div style="font-size:13px;color:#1A2E42;font-family:sans-serif"><strong>${r.desc}</strong></div>
+      ${dateLabel ? `<div style="font-size:11px;color:#4A6880;font-family:sans-serif;margin-top:3px">${isTC?'Period:':''} ${dateLabel}</div>` : ''}
+      ${r.notes ? `<div style="font-size:11px;color:#4A6880;font-family:sans-serif;margin-top:4px;font-style:italic">${r.notes}</div>` : ''}
+    </div>`;
+  }).join('');
+
+  const receiptNames = state.receipts.map(r=>r.name);
+  const hasReceipts = receiptNames.length > 0;
+
+  content.innerHTML = `
+    <div class="sec-title">Review & Submit</div>
+    <div class="sec-sub">Check everything looks right, then tap Submit — your Excel downloads and Outlook opens with the approval email ready to send.</div>
+    <div class="summ-card">
+      <div class="s-label">Employee</div>
+      <div class="s-val">${emp.name}</div>
+      <div class="s-grid">
+        <div class="s-item"><div class="s-label">Date Submitted</div><div class="s-val" style="font-size:13px">${state.submittedDate}</div></div>
+        <div class="s-item"><div class="s-label">Total</div><div class="s-val">€${total.toFixed(2)}</div></div>
+        <div class="s-item"><div class="s-label">Items</div><div class="s-val">${state.rows.length}</div></div>
+        <div class="s-item"><div class="s-label">Receipts</div><div class="s-val">${receiptNames.length > 0 ? receiptNames.length + ' file' + (receiptNames.length>1?'s':'') : '—'}</div></div>
+      </div>
+    </div>
+    <div id="expense-rows">${rowsHTML}</div>
+    ${hasReceipts ? `
+    <div style="margin-bottom:14px">
+      <div class="lbl" style="margin-bottom:6px">📎 Receipts to attach</div>
+      ${receiptNames.map(n=>`<div class="receipt-item"><span style="font-size:16px">${n.endsWith('.pdf')?'📄':'🖼️'}</span><span class="receipt-item-name">${n}</span></div>`).join('')}
+    </div>` : ''}
+    <div class="alert-info">📧 Outlook will open with the email already written. Attach the downloaded Excel${hasReceipts ? ' + your receipts' : ''} and hit Send.</div>`;
+
+  footer.innerHTML = `
+    <div class="btn-row" style="margin-bottom:8px">
+      <button class="btn-secondary" onclick="goBack(3)">← Back</button>
+    </div>
+    <button class="btn-accent" onclick="submitForApproval()">📤 Submit for Approval</button>`;
+}
+
+// ─── EXCEL GENERATION ─────────────────────────────────────────────────────
+function generateExcel(){
+  const emp = EMP.find(e=>e.id===state.employee);
+  const total = state.rows.reduce((s,r)=>s+(parseFloat(r.amount)||0), 0);
+  const today = state.submittedDate;
+
+  // Header block
+  const headerRows = [
+    ["SERN — General Expense Reimbursement Form"],
+    [],
+    ["Employee", emp.name, "", "Date Submitted", today],
+    ["Role",     emp.role, "", "Form Reference", `GER-${state.employee.toUpperCase()}-${today.replace(/-/g,'')}`],
+    [],
+    ["#", "Category", "Date / Period", "Description", "Notes", "Amount (€)"],
+  ];
+
+  const dataRows = state.rows.map((r,i)=>{
+    const catObj = CATS.find(c=>c.id===r.cat);
+    const isTC = r.cat==='traincard';
+    const periodStr = isTC
+      ? (r.periodFrom && r.periodTo ? `${r.periodFrom} → ${r.periodTo}` : r.periodFrom||r.periodTo||'')
+      : r.date;
+    return [
+      i+1,
+      catObj ? catObj.label.replace(/^.{2}/,'').trim() : r.cat,
+      periodStr,
+      r.desc,
+      r.notes || '',
+      parseFloat(r.amount)||0
+    ];
+  });
+
+  const footerRows = [
+    [],
+    ["", "", "", "", "TOTAL", total],
+    [],
+    ["Notes / Justification", "", "", "", "", ""],
+    [],
+    [],
+    [],
+    ["Employee signature", "", "", "Approved by (Network Coordinator)", "", ""],
+    [],
+    ["Date", "", "", "Date", "", ""],
+    [],
+    ["_____________________________", "", "", "_____________________________", "", ""],
+  ];
+
+  const allRows = [...headerRows, ...dataRows, ...footerRows];
+
+  const wb = XLSX.utils.book_new();
+  const ws = XLSX.utils.aoa_to_sheet(allRows);
+
+  // Column widths
+  ws['!cols'] = [
+    {wch:4}, {wch:28}, {wch:16}, {wch:38}, {wch:30}, {wch:14}
+  ];
+
+  // Merge title cell
+  ws['!merges'] = [
+    {s:{r:0,c:0}, e:{r:0,c:5}},           // Title
+    {s:{r:7,c:0}, e:{r:7,c:5}},           // Notes label
+    {s:{r:9,c:1}, e:{r:9,c:2}},           // Sig left
+    {s:{r:9,c:3}, e:{r:9,c:5}},           // Sig right
+  ];
+
+  XLSX.utils.book_append_sheet(wb, ws, "Reimbursement");
+
+  const fileName = `GER_${emp.name.replace(/\s/g,'_')}_${today}.xlsx`;
+  XLSX.writeFile(wb, fileName);
+  return fileName;
+}
+
+// ─── SUBMIT FOR APPROVAL ──────────────────────────────────────────────────
+function submitForApproval(){
+  const emp    = EMP.find(e=>e.id===state.employee);
+  const total  = state.rows.reduce((s,r)=>s+(parseFloat(r.amount)||0), 0);
+  const today  = state.submittedDate;
+  const ref    = `GER-${state.employee.toUpperCase()}-${today.replace(/-/g,'')}`;
+
+  // 1. Generate + download Excel
+  const fileName = generateExcel();
+
+  // 2. Build plain-text email body
+  const lineItems = state.rows.map((r,i)=>{
+    const catObj = CATS.find(c=>c.id===r.cat);
+    const catLabel = catObj ? catObj.label.replace(/^.{2}/,'').trim() : r.cat;
+    const isTC = r.cat==='traincard';
+    const periodStr = isTC
+      ? (r.periodFrom && r.periodTo ? `${r.periodFrom} → ${r.periodTo}` : r.periodFrom||r.periodTo||'')
+      : r.date;
+    const datePart = isTC ? `Period: ${periodStr}` : `Date: ${r.date}`;
+    const notes = r.notes ? `\n   Notes: ${r.notes}` : '';
+    return `${i+1}. [${catLabel}] ${r.desc}\n   ${datePart} — €${parseFloat(r.amount).toFixed(2)}${notes}`;
+  }).join('\n\n');
+
+  const receiptList = state.receipts.length
+    ? `\nReceipts attached (${state.receipts.length}):\n${state.receipts.map(r=>`  • ${r.name}`).join('\n')}`
+    : '\nNo receipt files selected in the tool — please attach your receipts manually.';
+
+  const body =
+`Expense Reimbursement Request — ${emp.name}
+Reference: ${ref}
+Date: ${today}
+
+EXPENSES
+────────────────────────────────────────
+${lineItems}
+
+────────────────────────────────────────
+TOTAL: €${total.toFixed(2)}
+${receiptList}
+
+Excel form attached: ${fileName}
+
+Please approve or contact me if you need any clarification.
+
+${emp.name}`;
+
+  // 3. Determine recipient (if Nicola submits her own, send to herself for now — adjust as needed)
+  const to = COORDINATOR_EMAIL;
+  const subject = encodeURIComponent(`Expense Reimbursement Request – ${emp.name} – ${today} – €${total.toFixed(2)}`);
+  const bodyEncoded = encodeURIComponent(body);
+
+  // Open default email client (Outlook, Apple Mail, etc.)
+  window.location.href = `mailto:${to}?subject=${subject}&body=${bodyEncoded}`;
+
+  // 4. Update footer
+  showToast("✅ Excel downloaded — attach it to the email");
+  setTimeout(()=>{
+    const footer = document.getElementById('footer');
+    footer.innerHTML = `
+      <div class="alert-info" style="margin-bottom:10px">📎 Attach <strong>${fileName}</strong>${state.receipts.length ? ' + your receipts' : ''} to the email, then send.</div>
+      <div class="btn-row">
+        <button class="btn-secondary" onclick="goBack(3)">← Edit</button>
+        <button class="btn-primary" onclick="resetAll()">New Request</button>
+      </div>
+      <button class="btn-accent" style="margin-top:8px" onclick="submitForApproval()">📤 Resend / Download Again</button>`;
+  }, 400);
+}
+
+// ─── NAVIGATION ───────────────────────────────────────────────────────────
+function goBack(currentStep){
+  state.step = currentStep - 1;
+  render();
+}
+
+function resetAll(){
+  state = { step:1, employee:null, rows:[], receipts:[], submittedDate: new Date().toISOString().split('T')[0] };
+  nextRowId = 1;
+  render();
+}
+
+// ─── TOAST ────────────────────────────────────────────────────────────────
+function showToast(msg){
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.style.opacity = '1';
+  setTimeout(()=>{ t.style.opacity='0'; }, 2800);
+}
+
+// ─── MAIN RENDER ──────────────────────────────────────────────────────────
+function render(){
+  renderSteps();
+  if(state.step===1) renderStep1();
+  else if(state.step===2) renderStep2();
+  else if(state.step===3) renderStep3();
+}
+
+render();
+</script>
+</body>
+</html>
