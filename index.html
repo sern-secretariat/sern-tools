@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
-<title>SERN Mission Expense Tool — 2026-09-29.5</title>
+<title>SERN Mission Expense Tool — 2026-09-29.7</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:'Georgia',serif;background:#EBF4FB;min-height:100vh;display:flex;justify-content:center}
@@ -114,7 +114,7 @@ const BASE_ADDRESSES={
   federica: "Sorbolo, Parma, Italy"
 };
 
-const APP_VERSION="2026-09-29.5";
+const APP_VERSION="2026-09-29.7";
 const EMP=[
   {id:"nicola",  name:"Nicola Catellani",        email:"nicola.catellani@sern.eu",          base:"Reggio Emilia",    card:"unicredit_2139", km:true,  tpl:"KM"},
   {id:"ginevra", name:"Ginevra Roli",             email:"ginevra.roli@sern.eu",              base:"Scandiano RE",     card:"soldo_ginevra",  km:true,  tpl:"KM"},
@@ -138,7 +138,7 @@ const TPL_KM = "UEsDBBQACAgIADqZnVwAAAAAAAAAAAAAAAAaAAAAeGwvX3JlbHMvd29ya2Jvb2su
 const PA_WEBHOOK_URL = "https://default27d8109b12614066badbab8867b147.c2.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/22a019d497e04dc4b26f4d521d0d2a52/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=RLNtVQceKw3_iwJwt2bHFEdaW8c6zN8XY8NuGIX3HuQ";
 
 // ⚠️ CONFIGURE: paste the URL of the new "Reimbursement Approval" PA flow here
-const PA_REIMB_WEBHOOK_URL = "https://default27d8109b12614066badbab8867b147.c2.environment.api.powerplatform.com:443/powerautomate/automations/direct/cu/05/workflows/94f32bac5da94f4fb0a7258aa9572db2/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=n6mrpO-Yb2roxUUCMJM5ABTFoCTXgTYJSSJ723Kh_wo";
+const PA_REIMB_WEBHOOK_URL = "PASTE_REIMBURSEMENT_FLOW_URL_HERE";
 
 let ST={
   step:-1,
@@ -1129,6 +1129,7 @@ function r3(){
     const d=document.createElement("div");
     d.className="exp-row"+(row.isDup?" dup":"");
     const open=!!ST.expanded[row.id];
+    const X=s=>String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
     const catOpts=CATS.map(cat=>'<option value="'+cat+'"'+(row.cat===cat?' selected':'')+'>'+CICONS[cat]+' '+cat+'</option>').join('');
     const kmRateLabel=row.kmRate?(row.kmInER?'🟢 Emilia-Romagna €0.41/km':'🟠 Outside ER €0.22/km'):'';
     const kmLiveAmt=(parseInt(row.km)||0)*(row.kmRate||0.41);
@@ -1171,7 +1172,6 @@ function r3(){
       ?'<button class="btn-keep" data-keep="'+row.id+'">✓ Keep</button>'
       :'';
     const dupTag=row.isDup?'<span class="dup-tag">DUP</span>':'';
-    const X=s=>String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
     const bodyHtml=open
       ?'<div class="exp-row-body">'
         +'<div class="field"><label class="lbl">Date</label>'
@@ -1705,6 +1705,7 @@ async function buildKMExcel(valid,year,month,monthName,totalKm,totalAmt){
     dataFine:"",
     paese:"Italy",
     importo:parseFloat((kmEurM+tpEurM).toFixed(2)),
+    importoTotaleMissione:parseFloat((kmEurM+tpEurM).toFixed(2)),
     importoSpese:0,
     importoKm:parseFloat(kmEurM.toFixed(2)),
     importoTelepass:parseFloat(tpEurM.toFixed(2)),
