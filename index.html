@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
-<title>SERN Mission Expense Tool — 2026-09-29.9</title>
+<title>SERN Mission Expense Tool — 2026-09-29.11</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:'Georgia',serif;background:#EBF4FB;min-height:100vh;display:flex;justify-content:center}
@@ -114,7 +114,7 @@ const BASE_ADDRESSES={
   federica: "Sorbolo, Parma, Italy"
 };
 
-const APP_VERSION="2026-09-29.9";
+const APP_VERSION="2026-09-29.11";
 const EMP=[
   {id:"nicola",  name:"Nicola Catellani",        email:"nicola.catellani@sern.eu",          base:"Reggio Emilia",    card:"unicredit_2139", km:true,  tpl:"KM"},
   {id:"ginevra", name:"Ginevra Roli",             email:"ginevra.roli@sern.eu",              base:"Scandiano RE",     card:"soldo_ginevra",  km:true,  tpl:"KM"},
@@ -138,7 +138,7 @@ const TPL_KM = "UEsDBBQACAgIADqZnVwAAAAAAAAAAAAAAAAaAAAAeGwvX3JlbHMvd29ya2Jvb2su
 const PA_WEBHOOK_URL = "https://default27d8109b12614066badbab8867b147.c2.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/22a019d497e04dc4b26f4d521d0d2a52/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=RLNtVQceKw3_iwJwt2bHFEdaW8c6zN8XY8NuGIX3HuQ";
 
 // ⚠️ CONFIGURE: paste the URL of the new "Reimbursement Approval" PA flow here
-const PA_REIMB_WEBHOOK_URL = "https://default27d8109b12614066badbab8867b147.c2.environment.api.powerplatform.com:443/powerautomate/automations/direct/cu/05/workflows/94f32bac5da94f4fb0a7258aa9572db2/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=n6mrpO-Yb2roxUUCMJM5ABTFoCTXgTYJSSJ723Kh_wo";
+const PA_REIMB_WEBHOOK_URL = "PASTE_REIMBURSEMENT_FLOW_URL_HERE";
 
 let ST={
   step:-1,
@@ -1051,9 +1051,14 @@ async function processFiles(){
   }
 }
 
-function updRow(id,field,val){
-  ST.rows=dupCheck(ST.rows.map(r=>r.id==id?{...r,[field]:val}:r).map(r=>({...r,isDup:false})));
-  r3();
+function updRow(id,field,val,rerender){
+  ST.rows=ST.rows.map(r=>r.id==id?{...r,[field]:val}:r);
+  // Re-rendering on every keystroke destroys the focused input, so only
+  // redraw once the field is committed (blur / change).
+  if(rerender){
+    ST.rows=dupCheck(ST.rows.map(r=>({...r,isDup:false})));
+    r3();
+  }
 }
 
 function r3(){
@@ -1092,7 +1097,7 @@ function r3(){
     ?'<div style="text-align:center;padding:20px 0;color:#4A6880;font-family:sans-serif;font-size:14px">🧾 No rows yet — add manually or go back</div>'
     :'';
   const totalsHtml=Object.keys(catT).length
-    ?'<div class="totals-bar">'
+    ?'<div class="totals-bar" id="totals-bar">'
       +Object.entries(catT).map(([k,v])=>'<div class="t-row"><span>'+CICONS[k]+' '+k+'</span><span style="font-weight:600;color:#1F4E79">€ '+v.toFixed(2)+'</span></div>').join('')
       +'<div class="t-row t-total"><span>TOTAL</span><span>€ '+total.toFixed(2)+'</span></div>'
       +'</div>'
@@ -1207,7 +1212,34 @@ function r3(){
     d.querySelector(".exp-row-head").onclick=()=>{ST.expanded[row.id]=!ST.expanded[row.id];r3()};
     d.querySelectorAll("[data-id]").forEach(el=>{
       el.onclick=e=>e.stopPropagation();
-      el.onchange=el.oninput=()=>updRow(el.dataset.id,el.dataset.f,el.type==="number"?parseFloat(el.value)||0:el.value);
+      const readVal=()=>el.type==="number"?parseFloat(el.value)||0:el.value;
+      // Update the row summary and totals in place. A full redraw here would
+      // destroy the focused input (losing focus after one character) and would
+      // also swallow clicks on the row buttons, because blur fires first.
+      const refresh=()=>{
+        const row=ST.rows.find(r=>r.id==el.dataset.id);
+        if(!row)return;
+        const sum=d.querySelector(".row-summary");
+        if(sum)sum.textContent=(row.date||'?')+' · '+(row.desc||'No description');
+        const amt=d.querySelector(".row-amt");
+        if(amt)amt.textContent='€'+(parseFloat(row.amt)||0).toFixed(2);
+        const tb=document.getElementById("totals-bar");
+        if(tb){
+          const v=ST.rows.filter(r=>!r.isDup);
+          const t=v.reduce((s2,r)=>s2+(parseFloat(r.amt)||0),0);
+          const ct={};v.forEach(r=>{ct[r.cat]=(ct[r.cat]||0)+(parseFloat(r.amt)||0)});
+          tb.innerHTML=Object.entries(ct).map(([k,v2])=>'<div class="t-row"><span>'+CICONS[k]+' '+k+'</span><span style="font-weight:600;color:#1F4E79">€ '+v2.toFixed(2)+'</span></div>').join('')
+            +'<div class="t-row t-total"><span>TOTAL</span><span>€ '+t.toFixed(2)+'</span></div>';
+        }
+      };
+      el.oninput=()=>{updRow(el.dataset.id,el.dataset.f,readVal(),false);refresh()};
+      el.onchange=()=>{
+        const before=ST.rows.map(r=>r.id+':'+(r.isDup?1:0)).join(',');
+        updRow(el.dataset.id,el.dataset.f,readVal(),false);
+        ST.rows=dupCheck(ST.rows.map(r=>({...r,isDup:false})));
+        const after=ST.rows.map(r=>r.id+':'+(r.isDup?1:0)).join(',');
+        if(before!==after)r3();else refresh();
+      };
     });
     const kc=d.querySelector("[data-kmcalc]");
     if(kc)kc.onclick=async e=>{
@@ -1259,15 +1291,17 @@ async function postReimbursement(payload){
       method:"POST",
       // text/plain keeps this a "simple request" so the browser skips the CORS
       // preflight — the PA HTTP trigger does not answer OPTIONS. The body is
-      // still JSON and is parsed by the trigger schema.
+      // still JSON; the flow parses it with a Parse JSON action.
       headers:{"Content-Type":"text/plain"},
       body:JSON.stringify(payload)
     });
+    console.log("Reimbursement POST status:",resp.status,resp.statusText);
     if(!resp.ok)throw new Error("HTTP "+resp.status);
+    toast("📤 Figures sent to Nicola for approval");
     return true;
   }catch(e){
-    console.error("Reimbursement PA call failed:",e.message);
-    toast("⚠️ Could not send figures for approval — tell Nicola");
+    console.error("Reimbursement PA call failed:",e);
+    toast("⚠️ Not sent: "+e.message,6000);
     return false;
   }
 }
@@ -1431,7 +1465,7 @@ async function buildExcel(emp,valid,total,catT){
   const kmTot=valid.reduce((s,r)=>s+(parseInt(r.km)||0),0);
   const kmEur=valid.reduce((s,r)=>s+parseFloat((((parseInt(r.km)||0))*(r.kmRate||0.41)).toFixed(2)),0);
   const tpEur=valid.reduce((s,r)=>s+(parseFloat(r.telepass)||0),0);
-  const sent=await postReimbursement({
+  await postReimbursement({
     id:reimbId(),
     dataRichiesta:new Date().toISOString(),
     dipendente:emp.name,
@@ -1464,7 +1498,6 @@ async function buildExcel(emp,valid,total,catT){
       telepass:parseFloat(r.telepass)||0
     }))
   });
-  if(sent)setTimeout(()=>toast('📤 Figures sent to Nicola for approval'),3000);
   }catch(e){toast('⚠️ Excel error: '+e.message);console.error(e);}
 }
 
@@ -1529,23 +1562,34 @@ function rKM(){
       +'<button id="km-add" style="width:100%;padding:9px;background:#F0F5FB;border:1.5px dashed #9AAFC5;border-radius:7px;font-size:13px;color:#1F4E79;cursor:pointer;font-family:sans-serif;margin-top:4px">+ Add trip</button>'
     +'</div>'
     +'<div style="background:#1F4E79;border-radius:10px;padding:14px;display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">'
-      +'<div style="color:#A8C8E8;font-family:sans-serif;font-size:13px">'+totalKm+' km'+(totalTelepass>0?' + €'+totalTelepass.toFixed(2)+' Telepass':'')+'</div>'
-      +'<div style="color:#C9A84C;font-family:Georgia,serif;font-size:18px;font-weight:700">€ '+totalAmt+'</div>'
+      +'<div style="color:#A8C8E8;font-family:sans-serif;font-size:13px" id="km-tot-left">'+totalKm+' km'+(totalTelepass>0?' + €'+totalTelepass.toFixed(2)+' Telepass':'')+'</div>'
+      +'<div style="color:#C9A84C;font-family:Georgia,serif;font-size:18px;font-weight:700" id="km-tot-right">€ '+totalAmt+'</div>'
     +'</div>';
   c.querySelectorAll("input[data-f]").forEach(el=>{
-    el.oninput=e=>{
-      const i=parseInt(e.target.dataset.i);
-      const f=e.target.dataset.f;
-      ST.kmRows[i][f]=e.target.value;
+    el.oninput=()=>{
+      const i=parseInt(el.dataset.i);
+      const f=el.dataset.f;
+      ST.kmRows[i][f]=el.value;
       if(f==="km"){
         const r=ST.kmRows[i];
-        const km=parseInt(e.target.value)||0;
+        const km=parseInt(el.value)||0;
         r.km=km;
         r.roundTripKm=km;
         if(!r.rate)r.rate=0.41; // default ER rate if not yet calculated
         r.amount=parseFloat((km*r.rate).toFixed(2));
-        rKM();
       }
+      // Totals are refreshed in place. Redrawing the grid on every keystroke
+      // destroys the focused input and swallows clicks on the row buttons.
+      const tk=ST.kmRows.reduce((s,r)=>s+(r.roundTripKm||parseInt(r.km)||0),0);
+      const tp=ST.kmRows.reduce((s,r)=>s+(parseFloat(r.telepass)||0),0);
+      const ta=ST.kmRows.reduce((s,r)=>{
+        const kmAmt=r.amount||(r.roundTripKm||parseInt(r.km)||0)*(r.rate||0.41);
+        return s+kmAmt+(parseFloat(r.telepass)||0);
+      },0).toFixed(2);
+      const l=document.getElementById("km-tot-left");
+      if(l)l.textContent=tk+' km'+(tp>0?' + €'+tp.toFixed(2)+' Telepass':'');
+      const rt=document.getElementById("km-tot-right");
+      if(rt)rt.textContent='€ '+ta;
     };
   });
   c.querySelectorAll("button[data-calc]").forEach(btn=>{
@@ -1695,7 +1739,7 @@ async function buildKMExcel(valid,year,month,monthName,totalKm,totalAmt){
   const kmEurM=valid.reduce((s,r)=>s+parseFloat((((r.roundTripKm||parseInt(r.km)||0))*(r.rate||0.41)).toFixed(2)),0);
   const tpEurM=valid.reduce((s,r)=>s+(parseFloat(r.telepass)||0),0);
   const monthISO=(year&&month)?(year+'-'+String(month).padStart(2,'0')):new Date().toISOString().slice(0,7);
-  const sentM=await postReimbursement({
+  await postReimbursement({
     id:reimbId(),
     dataRichiesta:new Date().toISOString(),
     dipendente:ST.emp?ST.emp.name:"",
@@ -1728,7 +1772,6 @@ async function buildKMExcel(valid,year,month,monthName,totalKm,totalAmt){
       telepass:parseFloat(r.telepass)||0
     }))
   });
-  if(sentM)setTimeout(()=>toast('📤 Figures sent to Nicola for approval'),3000);
   }catch(e){toast('⚠️ KM Excel error: '+e.message);console.error(e);}
 }
 
