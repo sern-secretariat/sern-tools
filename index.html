@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
-<title>SERN Mission Expense Tool</title>
+<title>SERN Mission Expense Tool — 2026-09-29.3</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:'Georgia',serif;background:#EBF4FB;min-height:100vh;display:flex;justify-content:center}
@@ -114,6 +114,7 @@ const BASE_ADDRESSES={
   federica: "Sorbolo, Parma, Italy"
 };
 
+const APP_VERSION="2026-09-29.3";
 const EMP=[
   {id:"nicola",  name:"Nicola Catellani",        email:"nicola.catellani@sern.eu",          base:"Reggio Emilia",    card:"unicredit_2139", km:true,  tpl:"KM"},
   {id:"ginevra", name:"Ginevra Roli",             email:"ginevra.roli@sern.eu",              base:"Scandiano RE",     card:"soldo_ginevra",  km:true,  tpl:"KM"},
@@ -135,6 +136,9 @@ const TPL_KM = "UEsDBBQACAgIADqZnVwAAAAAAAAAAAAAAAAaAAAAeGwvX3JlbHMvd29ya2Jvb2su
 
 // ⚠️ CONFIGURE: paste your Power Automate webhook URL here (never commit to GitHub)
 const PA_WEBHOOK_URL = "https://default27d8109b12614066badbab8867b147.c2.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/22a019d497e04dc4b26f4d521d0d2a52/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=RLNtVQceKw3_iwJwt2bHFEdaW8c6zN8XY8NuGIX3HuQ";
+
+// ⚠️ CONFIGURE: paste the URL of the new "Reimbursement Approval" PA flow here
+const PA_REIMB_WEBHOOK_URL = "PASTE_REIMBURSEMENT_FLOW_URL_HERE";
 
 let ST={
   step:-1,
@@ -1126,9 +1130,26 @@ function r3(){
     d.className="exp-row"+(row.isDup?" dup":"");
     const open=!!ST.expanded[row.id];
     const catOpts=CATS.map(cat=>'<option value="'+cat+'"'+(row.cat===cat?' selected':'')+'>'+CICONS[cat]+' '+cat+'</option>').join('');
+    const kmRateLabel=row.kmRate?(row.kmInER?'🟢 Emilia-Romagna €0.41/km':'🟠 Outside ER €0.22/km'):'';
+    const kmLiveAmt=(parseInt(row.km)||0)*(row.kmRate||0.41);
+    const kmDoubleWarn=(kmLiveAmt>0&&Math.abs((parseFloat(row.amt)||0)-kmLiveAmt)<0.51)
+      ?'<div style="padding:8px 12px;border-radius:6px;font-size:12px;background:#FFEBEE;color:#C62828;border-left:3px solid #C62828;font-family:sans-serif">⚠️ The amount (€'+(parseFloat(row.amt)||0).toFixed(2)+') matches the mileage reimbursement for '+(parseInt(row.km)||0)+' km. The mileage is calculated automatically from the KM — leave the amount at 0 unless there is a separate cost, otherwise it will be counted twice.</div>'
+      :'';
+    const kmAmtLabel=kmLiveAmt?(' · <strong>€'+kmLiveAmt.toFixed(2)+'</strong>'):'';
+    const kmStatus=row.kmCalculating
+      ?'<div style="font-size:11px;color:#E65100;font-family:sans-serif;margin-top:4px">⏳ Calculating distance…</div>'
+      :(row.kmDestName
+        ?'<div style="font-size:11px;color:#2E7D32;font-family:sans-serif;margin-top:4px">'+kmRateLabel+' · '+row.km+' km round trip from '+(emp.base||'home base')+kmAmtLabel+'</div>'
+        :'');
     const kmField=(emp.km&&ST.kmApproved)
-      ?'<div class="field"><label class="lbl">KM (if applicable)</label>'
+      ?'<div class="field"><label class="lbl">Destination (for automatic KM)</label>'
+        +'<div style="display:grid;grid-template-columns:1fr auto;gap:6px;align-items:center">'
+          +'<input type="text" value="'+X(row.kmDest)+'" placeholder="e.g. Quattro Castella" data-id="'+row.id+'" data-f="kmDest">'
+          +'<button data-kmcalc="'+row.id+'" style="padding:10px 14px;background:#1F4E79;color:#fff;border:none;border-radius:6px;font-size:13px;cursor:pointer;font-family:sans-serif;white-space:nowrap">📍 Calc KM</button>'
+        +'</div></div>'
+        +'<div class="field"><label class="lbl">KM (round trip — editable)</label>'
         +'<input type="number" step="1" value="'+(row.km||'')+'" placeholder="e.g. 142" data-id="'+row.id+'" data-f="km"></div>'
+        +kmStatus
       :'';
     const over300Warn=(parseFloat(row.amt)||0)>=300
       ?'<div style="padding:8px 12px;border-radius:6px;font-size:12px;background:#FFF3E0;color:#E65100;border-left:3px solid #E65100;font-family:sans-serif">⚠️ Single expense ≥ €300 — attach at least 2 written quotes</div>'
@@ -1159,8 +1180,9 @@ function r3(){
           +'<input type="text" value="'+X(row.desc)+'" placeholder="Merchant / service" data-id="'+row.id+'" data-f="desc"></div>'
         +'<div class="field"><label class="lbl">Category</label>'
           +'<select data-id="'+row.id+'" data-f="cat">'+catOpts+'</select></div>'
-        +'<div class="field"><label class="lbl">Amount (EUR)</label>'
+        +'<div class="field"><label class="lbl">'+((parseInt(row.km)||0)>0?'Amount (EUR) — other costs only, NOT the mileage':'Amount (EUR)')+'</label>'
           +'<input type="number" step="0.01" value="'+row.amt+'" data-id="'+row.id+'" data-f="amt"></div>'
+        +kmDoubleWarn
         +kmField
         +cardMatchNote
         +over300Warn
@@ -1185,6 +1207,24 @@ function r3(){
       el.onclick=e=>e.stopPropagation();
       el.onchange=el.oninput=()=>updRow(el.dataset.id,el.dataset.f,el.type==="number"?parseFloat(el.value)||0:el.value);
     });
+    const kc=d.querySelector("[data-kmcalc]");
+    if(kc)kc.onclick=async e=>{
+      e.stopPropagation();
+      const rowObj=ST.rows.find(x=>x.id==kc.dataset.kmcalc);
+      if(!rowObj)return;
+      if(!rowObj.kmDest)return toast("⚠️ Enter a destination first");
+      if(!ST.emp||!BASE_ADDRESSES[ST.emp.id])return toast("⚠️ No home base on file for this employee — enter KM manually");
+      rowObj.kmCalculating=true;r3();
+      const result=await calcDistance(rowObj.kmDest,ST.emp.id);
+      rowObj.kmCalculating=false;
+      if(!result||result.error||!result.roundTripKm){toast("⚠️ Could not calculate — enter KM manually");r3();return;}
+      rowObj.km=result.roundTripKm;
+      rowObj.kmDestName=result.destName||rowObj.kmDest;
+      rowObj.kmRate=result.rate||0.41;
+      rowObj.kmInER=result.inER;
+      rowObj.kmAmount=result.amount||parseFloat((result.roundTripKm*(result.rate||0.41)).toFixed(2));
+      r3();
+    };
     const db=d.querySelector("[data-del]");
     if(db)db.onclick=e=>{e.stopPropagation();ST.rows=dupCheck(ST.rows.filter(r=>r.id!=db.dataset.del).map(r=>({...r,isDup:false})));r3()};
     const kb=d.querySelector("[data-keep]");
@@ -1203,6 +1243,31 @@ function r3(){
   document.getElementById("b3b").onclick=()=>{ST.step=2;render()};
   document.getElementById("b3g").onclick=generate;
 }
+
+// Send generated reimbursement figures to Power Automate for Director approval.
+// On approval the flow writes a row into TabellaRimborsi (presenze_sern_2026_v2.xlsx).
+async function postReimbursement(payload){
+  if(!PA_REIMB_WEBHOOK_URL||PA_REIMB_WEBHOOK_URL.indexOf("PASTE_")===0){
+    console.warn("Reimbursement webhook not configured — figures not sent");
+    return false;
+  }
+  try{
+    const resp=await fetch(PA_REIMB_WEBHOOK_URL,{
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify(payload)
+    });
+    if(!resp.ok&&resp.status!==0)throw new Error("HTTP "+resp.status);
+  }catch(e){
+    // CORS errors are expected from the browser — PA still receives the request
+    console.log("Reimbursement PA call result:",e.message);
+  }
+  return true;
+}
+
+function reimbAmbito(){return ST.expType==="Progetti 26"?"Project Based":"Institutional";}
+function reimbMese(d){return (d&&/^\d{4}-\d{2}/.test(d))?d.slice(0,7):new Date().toISOString().slice(0,7);}
+function reimbId(){return "RMB-"+Date.now().toString(36).toUpperCase()+"-"+Math.random().toString(36).slice(2,6).toUpperCase();}
 
 function generate(){
   const emp=ST.emp;
@@ -1291,7 +1356,13 @@ async function buildExcel(emp,valid,total,catT){
       if(tp>0)xml=xml.replace(cRx('K'+r),'<c r="K'+r+'" s="'+S.K+'" t="n"><v>'+tp+'</v></c>');
       if(row.src)xml=xml.replace(cRx('M'+r),'<c r="M'+r+'" s="'+S.M+'" t="inlineStr"><is><t>'+X(row.src)+'</t></is></c>');
       if(row.notes)xml=xml.replace(cRx('N'+r),'<c r="N'+r+'" s="'+S.N+'" t="inlineStr"><is><t>'+X(row.notes)+'</t></is></c>');
-      patchV('J'+r,parseFloat((km*0.41).toFixed(2)));
+      const rate=row.kmRate||0.41;
+      if(km>0&&Math.abs(rate-0.41)>0.001){
+        // Outside Emilia-Romagna: template formula is I*$K$5 (=0.41), so write the value literally
+        xml=xml.replace(cRx('J'+r),'<c r="J'+r+'" s="'+S.J+'" t="n"><v>'+parseFloat((km*rate).toFixed(2))+'</v></c>');
+      }else{
+        patchV('J'+r,parseFloat((km*rate).toFixed(2)));
+      }
     }
   });
 
@@ -1308,7 +1379,7 @@ async function buildExcel(emp,valid,total,catT){
       xml=xml.replace(new RegExp('(<c r="'+a+'"[^>]*>)<f[^>]*>[^<]*<\\/f>(?:<v>[^<]*<\\/v>)?'),
         '$1<f aca="false">'+f+'</f><v>'+v+'</v>');
     };
-    const kmAmt=valid.reduce((s,r)=>s+parseFloat((((parseInt(r.km)||0))*0.41).toFixed(2)),0);
+    const kmAmt=valid.reduce((s,r)=>s+parseFloat((((parseInt(r.km)||0))*(r.kmRate||0.41)).toFixed(2)),0);
     const tpAmt=valid.reduce((s,r)=>s+(parseFloat(r.telepass)||0),0);
     setF('K6','SUM(O12:O25)',parseFloat((kmAmt+tpAmt+total).toFixed(2)));
     setF('K7','SUM(J12:J25)',parseFloat(kmAmt.toFixed(2)));
@@ -1331,6 +1402,45 @@ async function buildExcel(emp,valid,total,catT){
   document.body.appendChild(a);a.click();document.body.removeChild(a);
   setTimeout(()=>URL.revokeObjectURL(url),1000);
   toast('✅ Excel downloaded: '+filename);
+
+  // Send figures to the Director for approval → TabellaRimborsi
+  const kmTot=valid.reduce((s,r)=>s+(parseInt(r.km)||0),0);
+  const kmEur=valid.reduce((s,r)=>s+parseFloat((((parseInt(r.km)||0))*(r.kmRate||0.41)).toFixed(2)),0);
+  const tpEur=valid.reduce((s,r)=>s+(parseFloat(r.telepass)||0),0);
+  const sent=await postReimbursement({
+    id:reimbId(),
+    dataRichiesta:new Date().toISOString(),
+    dipendente:emp.name,
+    email:emp.email,
+    tipoRichiesta:kmTot>0?"Mileage Reimbursement":"Expense Reimbursement",
+    ambito:reimbAmbito(),
+    progetto:ST.project||"",
+    descrizione:ST.missionName||"",
+    data:ST.dateFrom||"",
+    dataFine:(ST.dateTo&&ST.dateTo!==ST.dateFrom)?ST.dateTo:"",
+    paese:ST.destCountry||"",
+    importo:parseFloat(kmEur.toFixed(2)),
+    importoTotaleMissione:parseFloat((total+kmEur+tpEur).toFixed(2)),
+    importoSpese:parseFloat(total.toFixed(2)),
+    importoKm:parseFloat(kmEur.toFixed(2)),
+    importoTelepass:parseFloat(tpEur.toFixed(2)),
+    totaleKm:kmTot,
+    mese:reimbMese(ST.dateFrom),
+    authRef:ST.auth||"",
+    fileName:filename,
+    stato:"In attesa",
+    righe:valid.map(r=>({
+      data:r.date||"",
+      descrizione:r.desc||"",
+      categoria:r.cat||"",
+      importo:parseFloat(r.amt)||0,
+      km:parseInt(r.km)||0,
+      tariffa:r.kmRate||0.41,
+      destinazione:r.kmDest||"",
+      telepass:parseFloat(r.telepass)||0
+    }))
+  });
+  if(sent)setTimeout(()=>toast('📤 Figures sent to Nicola for approval'),3000);
   }catch(e){toast('⚠️ Excel error: '+e.message);console.error(e);}
 }
 
@@ -1522,6 +1632,44 @@ async function buildKMExcel(valid,year,month,monthName,totalKm,totalAmt){
   document.body.appendChild(a);a.click();document.body.removeChild(a);
   setTimeout(()=>URL.revokeObjectURL(url),1000);
   toast('✅ KM Report downloaded: '+filename);
+
+  // Send figures to the Director for approval → TabellaRimborsi
+  const kmEurM=valid.reduce((s,r)=>s+parseFloat((((r.roundTripKm||parseInt(r.km)||0))*(r.rate||0.41)).toFixed(2)),0);
+  const tpEurM=valid.reduce((s,r)=>s+(parseFloat(r.telepass)||0),0);
+  const monthISO=(year&&month)?(year+'-'+String(month).padStart(2,'0')):new Date().toISOString().slice(0,7);
+  const sentM=await postReimbursement({
+    id:reimbId(),
+    dataRichiesta:new Date().toISOString(),
+    dipendente:ST.emp?ST.emp.name:"",
+    email:ST.emp?ST.emp.email:"",
+    tipoRichiesta:"Mileage Reimbursement",
+    ambito:"Institutional",
+    progetto:"",
+    descrizione:"Monthly mileage "+monthName,
+    data:valid[0]&&valid[0].date?valid[0].date:(monthISO+'-01'),
+    dataFine:"",
+    paese:"Italy",
+    importo:parseFloat((kmEurM+tpEurM).toFixed(2)),
+    importoSpese:0,
+    importoKm:parseFloat(kmEurM.toFixed(2)),
+    importoTelepass:parseFloat(tpEurM.toFixed(2)),
+    totaleKm:totalKm,
+    mese:monthISO,
+    authRef:ST.auth||"",
+    fileName:filename,
+    stato:"In attesa",
+    righe:valid.map(r=>({
+      data:r.date||"",
+      descrizione:r.notes||"",
+      categoria:"Mileage",
+      importo:0,
+      km:r.roundTripKm||parseInt(r.km)||0,
+      tariffa:r.rate||0.41,
+      destinazione:r.dest||"",
+      telepass:parseFloat(r.telepass)||0
+    }))
+  });
+  if(sentM)setTimeout(()=>toast('📤 Figures sent to Nicola for approval'),3000);
   }catch(e){toast('⚠️ KM Excel error: '+e.message);console.error(e);}
 }
 
