@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
-<title>SERN Mission Expense Tool — 2026-09-29.13</title>
+<title>SERN Mission Expense Tool — 2026-09-30.2</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:'Georgia',serif;background:#EBF4FB;min-height:100vh;display:flex;justify-content:center}
@@ -114,7 +114,7 @@ const BASE_ADDRESSES={
   federica: "Sorbolo, Parma, Italy"
 };
 
-const APP_VERSION="2026-09-29.13";
+const APP_VERSION="2026-09-30.2";
 const EMP=[
   {id:"nicola",  name:"Nicola Catellani",        email:"nicola.catellani@sern.eu",          base:"Reggio Emilia",    card:"unicredit_2139", km:true,  tpl:"KM"},
   {id:"ginevra", name:"Ginevra Roli",             email:"ginevra.roli@sern.eu",              base:"Scandiano RE",     card:"soldo_ginevra",  km:true,  tpl:"KM"},
@@ -138,7 +138,7 @@ const TPL_KM = "UEsDBBQACAgIADqZnVwAAAAAAAAAAAAAAAAaAAAAeGwvX3JlbHMvd29ya2Jvb2su
 const PA_WEBHOOK_URL = "https://default27d8109b12614066badbab8867b147.c2.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/22a019d497e04dc4b26f4d521d0d2a52/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=RLNtVQceKw3_iwJwt2bHFEdaW8c6zN8XY8NuGIX3HuQ";
 
 // ⚠️ CONFIGURE: paste the URL of the new "Reimbursement Approval" PA flow here
-const PA_REIMB_WEBHOOK_URL = "https://default27d8109b12614066badbab8867b147.c2.environment.api.powerplatform.com:443/powerautomate/automations/direct/cu/05/workflows/94f32bac5da94f4fb0a7258aa9572db2/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=n6mrpO-Yb2roxUUCMJM5ABTFoCTXgTYJSSJ723Kh_wo";
+const PA_REIMB_WEBHOOK_URL = "PASTE_REIMBURSEMENT_FLOW_URL_HERE";
 
 let ST={
   step:-1,
@@ -823,6 +823,12 @@ function r1(){
     +'</div>'
     +'<div class="field"><label class="lbl">Authorization Reference <span class="req">*</span></label>'
       +'<input type="text" id="fa" placeholder="e.g. MISS-2026-05-SMITH-BRUSSELS" value="'+ST.auth+'"'+(ST.auth?' readonly style="background:#F7F9FC;color:#4A6880;border-color:#D6E4F0"':'')+'></div>'
+    +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">'
+      +'<div class="field"><label class="lbl">Mission start <span class="req">*</span></label>'
+        +'<input type="date" id="f-md1" value="'+(ST.dateFrom||'')+'"></div>'
+      +'<div class="field"><label class="lbl">Mission end</label>'
+        +'<input type="date" id="f-md2" value="'+(ST.dateTo||'')+'"></div>'
+    +'</div>'
     +'<div class="field"><label class="lbl">Expense Type <span class="req">*</span></label>'
       +'<div class="type-row">'
         +'<button class="type-btn'+(ST.expType==="Spese di funzionamento"?" sel":"")+'" data-t="Spese di funzionamento">Institutional activities</button>'
@@ -884,6 +890,8 @@ function r1(){
   });
   document.getElementById("fm").oninput=e=>ST.missionName=e.target.value;
   document.getElementById("fa").oninput=e=>ST.auth=e.target.value;
+  const md1=document.getElementById("f-md1");if(md1)md1.onchange=e=>ST.dateFrom=e.target.value;
+  const md2=document.getElementById("f-md2");if(md2)md2.onchange=e=>ST.dateTo=e.target.value;
   document.querySelectorAll(".type-btn").forEach(b=>b.onclick=()=>{ST.expType=b.dataset.t;if(ST.expType!=="Progetti 26")ST.project="";render()});
   const ps=document.getElementById("fp");if(ps)ps.onchange=e=>ST.project=e.target.value;
   const kt=document.getElementById("km-toggle");if(kt)kt.onclick=()=>{ST.kmApproved=!ST.kmApproved;r1()};
@@ -893,6 +901,7 @@ function r1(){
     if(!ST.emp)return toast("⚠️ Select an employee");
     if(!ST.missionName.trim())return toast("⚠️ Enter a mission name");
     if(!ST.auth.trim())return toast("⚠️ Enter authorization reference");
+    if(!ST.dateFrom)return toast("⚠️ Enter the mission start date");
     if(ST.expType==="Progetti 26"&&!ST.project)return toast("⚠️ Select a project");
     ST.step=2;render();
   };
@@ -1388,6 +1397,13 @@ async function buildExcel(emp,valid,total,catT){
   const CAT_KM={Flight:'D',Accommodation:'E','Train-bus-taxi':'F',Meals:'G',Fees:'H',Telepass:'K',Fuel:'K','Car rental':'L',Other:'L'};
   const CAT=useKM?CAT_KM:CAT_NO_KM;
   const catSums={D:0,E:0,F:0,G:0,H:0,I:0};
+  // The rate cell K5 drives the J column formula. If every trip uses the same
+  // rate, write it into K5 so the form SHOWS the rate actually applied
+  // (€0.22 outside Emilia-Romagna) instead of the template default of €0.41.
+  const kmRatesUsed=valid.filter(r=>(parseInt(r.km)||0)>0).map(r=>r.kmRate||0.41)
+    .filter((v,i,a)=>a.indexOf(v)===i);
+  const kmSingleRate=kmRatesUsed.length===1?kmRatesUsed[0]:null;
+  if(useKM&&kmSingleRate)xml=xml.replace(cRx('K5'),'<c r="K5" s="5" t="n"><v>'+kmSingleRate+'</v></c>');
 
   valid.forEach((row,i)=>{
     const r=12+i;
@@ -1412,8 +1428,8 @@ async function buildExcel(emp,valid,total,catT){
       if(row.src)xml=xml.replace(cRx('M'+r),'<c r="M'+r+'" s="'+S.M+'" t="inlineStr"><is><t>'+X(row.src)+'</t></is></c>');
       if(row.notes)xml=xml.replace(cRx('N'+r),'<c r="N'+r+'" s="'+S.N+'" t="inlineStr"><is><t>'+X(row.notes)+'</t></is></c>');
       const rate=row.kmRate||0.41;
-      if(km>0&&Math.abs(rate-0.41)>0.001){
-        // Outside Emilia-Romagna: template formula is I*$K$5 (=0.41), so write the value literally
+      if(km>0&&!kmSingleRate&&Math.abs(rate-0.41)>0.001){
+        // Mixed rates in one form: K5 can only hold one, so write this row literally
         xml=xml.replace(cRx('J'+r),'<c r="J'+r+'" s="'+S.J+'" t="n"><v>'+parseFloat((km*rate).toFixed(2))+'</v></c>');
       }else{
         patchV('J'+r,parseFloat((km*rate).toFixed(2)));
@@ -1690,6 +1706,12 @@ async function buildKMExcel(valid,year,month,monthName,totalKm,totalAmt){
   putStr('C7',monthName);
   putStr('C8',new Date().toISOString().slice(0,10));
 
+  // Write the applied rate into K5 so the form shows €0.22 where that is what
+  // was used, rather than the template default of €0.41.
+  const kmRatesM=valid.filter(r=>(r.roundTripKm||parseInt(r.km)||0)>0).map(r=>r.rate||0.41)
+    .filter((v,i,a)=>a.indexOf(v)===i);
+  const kmSingleRateM=kmRatesM.length===1?kmRatesM[0]:null;
+  if(kmSingleRateM)xml=xml.replace(cRx('K5'),'<c r="K5" s="5" t="n"><v>'+kmSingleRateM+'</v></c>');
   valid.forEach((r,i)=>{
     const row=12+i;
     const S=row%2===0?EKM:OKM;
@@ -1700,8 +1722,8 @@ async function buildKMExcel(valid,year,month,monthName,totalKm,totalAmt){
     if(km>0)xml=xml.replace(cRx('I'+row),'<c r="I'+row+'" s="'+S.I+'" t="n"><v>'+km+'</v></c>');
     if(tp>0)xml=xml.replace(cRx('K'+row),'<c r="K'+row+'" s="'+S.K+'" t="n"><v>'+tp+'</v></c>');
     patchV('J'+row,parseFloat((km*(r.rate||0.41)).toFixed(2)));
-    if(km>0&&Math.abs((r.rate||0.41)-0.41)>0.001){
-      // Outside Emilia-Romagna: template formula is I*$K$5 (=0.41), so write the value literally
+    if(km>0&&!kmSingleRateM&&Math.abs((r.rate||0.41)-0.41)>0.001){
+      // Mixed rates in one form: K5 can only hold one, so write this row literally
       xml=xml.replace(cRx('J'+row),'<c r="J'+row+'" s="'+S.J+'" t="n"><v>'+parseFloat((km*r.rate).toFixed(2))+'</v></c>');
     }
   });
