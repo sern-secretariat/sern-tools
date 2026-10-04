@@ -338,7 +338,7 @@ async function sendClaim(c){
     // CORS errors are expected from the browser — PA still receives the request. Check the flow run history.
     console.log('PA reimbursement call result:',e.message);
   }
-  toast('📨 Claim sent to Nicola for approval — you will get an email with the outcome',4000);
+  toast(c.importo>0?'📨 Claim sent to Nicola for approval — you will get an email with the outcome':'📨 Claim recorded — company card only, no approval needed. You will get a confirmation email',4500);
 }
 
 function claimBase(tipo){
