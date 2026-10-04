@@ -33,7 +33,7 @@ function main(workbook: ExcelScript.Workbook) {
   let rimborsiRighe: (string | number | boolean)[][] = [];
   let iRDip = -1; let iRTipo = -1; let iRData = -1;
   let iRImporto = -1; let iRProgetto = -1;
-  let iRProgDate = -1; let iRTravDate = -1; let iRViaggioLungo = -1;
+  let iRProgDate = -1; let iRTravDate = -1; let iRViaggioLungo = -1; let iRStato = -1;
   if (tabellaRimb) {
     let rimColonne = tabellaRimb.getHeaderRowRange().getValues()[0];
     rimborsiRighe = tabellaRimb.getRangeBetweenHeaderAndTotal().getValues();
@@ -47,6 +47,7 @@ function main(workbook: ExcelScript.Workbook) {
       if (nome === "GiorniProgrammaDate") iRProgDate = c;
       if (nome === "GiorniViaggioDate") iRTravDate = c;
       if (nome === "Viaggio_lungo") iRViaggioLungo = c;
+      if (nome === "Stato") iRStato = c;
     }
     console.log("TabellaRimborsi: " + rimborsiRighe.length.toString() + " righe");
   }
@@ -54,6 +55,17 @@ function main(workbook: ExcelScript.Workbook) {
     dataStr = dataStr.trim();
     let spazio = dataStr.indexOf(" ");
     if (spazio > 0) dataStr = dataStr.substring(0, spazio);
+    // ISO format yyyy-mm-dd (sent by the Mission Tool since v2026-10-04.1), optionally with time
+    let tPos = dataStr.indexOf("T");
+    if (tPos > 0) dataStr = dataStr.substring(0, tPos);
+    if (dataStr.length === 10 && dataStr.charAt(4) === "-" && dataStr.charAt(7) === "-") {
+      let aIso = parseInt(dataStr.substring(0, 4));
+      let mIso = parseInt(dataStr.substring(5, 7));
+      let gIso = parseInt(dataStr.substring(8, 10));
+      if (isNaN(gIso) || isNaN(mIso) || isNaN(aIso)) return null;
+      if (gIso < 1 || gIso > 31 || mIso < 1 || mIso > 12) return null;
+      return { giorno: gIso, mese: mIso, anno: aIso };
+    }
     let parti = dataStr.split("/");
     if (parti.length !== 3) return null;
     let giorno = parseInt(parti[0]);
@@ -91,6 +103,9 @@ function main(workbook: ExcelScript.Workbook) {
     let rimborsiMese: (string | number | boolean)[][] = [];
     for (let r = 0; r < rimborsiRighe.length; r++) {
       let riga = rimborsiRighe[r];
+      // Only approved rows reach payroll: "In attesa" and "Respinta" are skipped (empty Stato = legacy row, kept)
+      let stato = iRStato >= 0 ? riga[iRStato].toString().trim() : "";
+      if (stato !== "" && stato !== "Approvata") continue;
       let tipo = iRTipo >= 0 ? riga[iRTipo].toString() : "";
       let appartiene = false;
       if (tipo === "Mission") {
