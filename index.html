@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
-<title>SERN Mission Expense Tool — v2026-10-04.1</title>
+<title>SERN Mission Expense Tool — v2026-10-08.1</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:'Georgia',serif;background:#EBF4FB;min-height:100vh;display:flex;justify-content:center}
@@ -130,7 +130,7 @@ const ANTHROPIC_API_KEY = "YOUR_ANTHROPIC_API_KEY_HERE";
 
 // Cloudflare Worker proxy URL for receipt parsing
 const WORKER_URL = "https://sern-receipt-parser.nicola-catellani.workers.dev";
-const APP_VERSION = "2026-10-04.1";
+const APP_VERSION = "2026-10-08.1";
 document.addEventListener("DOMContentLoaded",()=>{const v=document.getElementById("app-version");if(v)v.textContent="v"+APP_VERSION;});
 {const v=document.getElementById("app-version");if(v)v.textContent="v"+APP_VERSION;}
 const TPL_NO_KM = "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";
@@ -153,6 +153,7 @@ let ST={
   carUse:false,
   carReason:"",
   estimatedCost:"",
+  costItems:[],          // [{cat,desc,amount,cheapest,justification,altDescription,altCost,files:[{name,type,size,b64}]}]
   programmeDays:0,
   travelDays:0,
   travelExceptions:[],   // [{date,condition,justification,altDescription,altCost}] max 2
@@ -670,6 +671,123 @@ function rHome(){
   document.getElementById("footer").innerHTML='';
 }
 
+// ═══════════════════════════════════════════════════════════════════════
+// ESTIMATED COST ITEMS — each item is checked individually against the €300 rule
+// (Travel Policy §3.1: purchases above €300 need alternatives considered and documented)
+// ═══════════════════════════════════════════════════════════════════════
+const COST_LIMIT=300;
+const COST_CATS=["Flight","Accommodation","Train-bus-taxi","Car rental","Fees","Meals","Other"];
+const QUOTE_MAX_MB=5, QUOTE_MAX_TOTAL_MB=20;
+function esc(s){return String(s==null?"":s).replace(/&/g,"&amp;").replace(/"/g,"&quot;").replace(/</g,"&lt;").replace(/>/g,"&gt;");}
+function isOverLimit(it){return (parseFloat(it.amount)||0)>=COST_LIMIT;}
+function costTotal(){return rnd2((ST.costItems||[]).reduce((s,it)=>s+(parseFloat(it.amount)||0),0));}
+function newCostItem(){return {cat:"",desc:"",amount:"",cheapest:false,justification:"",altDescription:"",altCost:"",files:[]};}
+function quoteBytes(){let b=0;(ST.costItems||[]).forEach(it=>(it.files||[]).forEach(f=>b+=f.size||0));return b;}
+
+function costItemsHtml(){
+  const items=ST.costItems||[];
+  const inp='width:100%;padding:8px 10px;border:1px solid #E8EEF5;border-radius:5px;font-family:sans-serif;font-size:13px;color:#1A2E42;background:#fff;outline:none;box-sizing:border-box';
+  const sm='font-size:11px;color:#4A6880;font-family:sans-serif;display:block;margin-bottom:3px';
+  const rows=items.map((it,i)=>{
+    const over=isOverLimit(it);
+    const catOpts='<option value="">— Category —</option>'+COST_CATS.map(k=>'<option value="'+k+'"'+(it.cat===k?' selected':'')+'>'+(CICONS[k]||'')+' '+k+'</option>').join('');
+    const files=(it.files||[]).map((f,j)=>
+      '<div style="display:flex;align-items:center;gap:7px;padding:5px 8px;border:1px solid #D6E4F0;border-radius:5px;background:#fff;margin-top:5px;font-size:12px;font-family:sans-serif">'
+        +'<span>📄</span><span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(f.name)+'</span>'
+        +'<span style="color:#9AAFC5">'+(f.size/1024/1024).toFixed(1)+' MB</span>'
+        +'<button data-ci-frm="'+i+':'+j+'" style="border:none;background:none;color:#C62828;cursor:pointer;font-size:13px">✕</button>'
+      +'</div>').join('');
+    const overBox=over
+      ?'<div style="margin-top:8px;padding:10px 12px;border-radius:7px;border:1.5px solid #FDD;background:#FFF8F8;font-family:sans-serif">'
+        +'<div style="font-size:12px;font-weight:600;color:#C62828;margin-bottom:7px">⚠️ This item is ≥ €'+COST_LIMIT+' — cheapest option must be confirmed and documented</div>'
+        +'<div style="display:flex;align-items:flex-start;gap:8px;margin-bottom:8px;cursor:pointer" data-ci-chk="'+i+'">'
+          +'<div style="width:18px;height:18px;border-radius:3px;border:1.5px solid '+(it.cheapest?'#1F4E79':'#9AAFC5')+';background:'+(it.cheapest?'#1F4E79':'#fff')+';flex-shrink:0;margin-top:1px;display:flex;align-items:center;justify-content:center">'
+            +(it.cheapest?'<span style="color:#fff;font-size:11px">✓</span>':'')
+          +'</div>'
+          +'<span style="font-size:12px;color:#1A2E42">I confirm I have selected the most cost-effective option available</span>'
+        +'</div>'
+        +'<div style="margin-bottom:8px"><label style="'+sm+'">Justification <span style="color:#C62828">*</span></label>'
+          +'<input type="text" data-ci="'+i+'" data-f="justification" value="'+esc(it.justification)+'" placeholder="e.g. Ryanair FR4521 €340 — only direct flight on the meeting dates" style="'+inp+'"></div>'
+        +'<div style="display:grid;grid-template-columns:1fr auto;gap:8px;margin-bottom:8px"><div>'
+          +'<label style="'+sm+'">Alternative considered</label>'
+          +'<input type="text" data-ci="'+i+'" data-f="altDescription" value="'+esc(it.altDescription)+'" placeholder="e.g. Vueling via Madrid, 2 stops" style="'+inp+'"></div>'
+          +'<div style="min-width:90px"><label style="'+sm+'">Alt. cost (€)</label>'
+          +'<input type="number" data-ci="'+i+'" data-f="altCost" value="'+esc(it.altCost)+'" placeholder="e.g. 395" style="'+inp+'"></div>'
+        +'</div>'
+        +'<label style="'+sm+'">Supporting documents (quotes, fare screenshots) <span style="color:#C62828">*</span></label>'
+        +'<button data-ci-up="'+i+'" style="width:100%;padding:9px;border:2px dashed #A8C8E8;border-radius:6px;background:#EBF4FB;color:#1F4E79;font-size:12px;font-weight:600;cursor:pointer;font-family:sans-serif">📎 Upload quotes / comparison (PDF or image, max '+QUOTE_MAX_MB+' MB each)</button>'
+        +files
+      +'</div>'
+      :'';
+    return '<div style="border:1.5px solid '+(over?'#F5C2C2':'#E8EEF5')+';border-radius:8px;padding:10px 12px;margin-bottom:8px;background:#F7F9FC">'
+      +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:7px">'
+        +'<span style="font-size:12px;font-weight:600;color:#1F4E79;font-family:sans-serif">Cost item '+(i+1)+'</span>'
+        +'<button data-ci-del="'+i+'" style="border:none;background:none;color:#C62828;font-size:14px;cursor:pointer;padding:0">✕</button>'
+      +'</div>'
+      +'<div style="display:grid;grid-template-columns:1fr 110px;gap:8px;margin-bottom:8px">'
+        +'<select data-ci="'+i+'" data-f="cat" style="'+inp+'">'+catOpts+'</select>'
+        +'<input type="number" min="0" step="0.01" data-ci="'+i+'" data-f="amount" value="'+esc(it.amount)+'" placeholder="€" style="'+inp+'">'
+      +'</div>'
+      +'<input type="text" data-ci="'+i+'" data-f="desc" value="'+esc(it.desc)+'" placeholder="Description, e.g. Return flight BLQ–ARN" style="'+inp+'">'
+      +overBox
+    +'</div>';
+  }).join('');
+  return '<div class="field"><label class="lbl">Estimated costs</label>'
+    +'<div style="font-size:11px;color:#4A6880;font-family:sans-serif;margin-bottom:8px">Add each expected cost separately (flight, hotel, train…). Any single item of €'+COST_LIMIT+' or more needs the cheapest-option check and supporting documents.</div>'
+    +rows
+    +'<button class="add-row-btn" id="ci-add" type="button">+ Add cost item</button>'
+    +'<div style="display:flex;justify-content:space-between;margin-top:9px;padding:9px 12px;border-radius:6px;background:#D6E4F0;font-family:sans-serif;font-size:13px;color:#1F4E79">'
+      +'<span>Estimated total</span><span style="font-weight:700" id="ci-total">€ '+costTotal().toFixed(2)+'</span></div>'
+    +'<input type="file" id="quote-input" multiple accept=".pdf,.jpg,.jpeg,.png,.webp,.heic" style="display:none">'
+  +'</div>';
+}
+
+function bindCostItems(){
+  ST.costItems=ST.costItems||[];
+  const add=document.getElementById("ci-add");
+  if(add)add.onclick=()=>{ST.costItems.push(newCostItem());r0();};
+  document.querySelectorAll("[data-ci][data-f]").forEach(el=>{
+    const i=parseInt(el.dataset.ci),f=el.dataset.f;
+    el.addEventListener("input",()=>{
+      if(!ST.costItems[i])return;
+      ST.costItems[i][f]=el.value;
+      if(f==="amount"){const t=document.getElementById("ci-total");if(t)t.textContent="€ "+costTotal().toFixed(2);}
+    });
+    el.addEventListener("change",()=>{
+      if(!ST.costItems[i])return;
+      const wasOver=isOverLimit(ST.costItems[i]);
+      ST.costItems[i][f]=el.value;
+      if(f==="amount"&&wasOver!==isOverLimit(ST.costItems[i]))r0();   // show/hide the ≥€300 box
+    });
+  });
+  document.querySelectorAll("[data-ci-del]").forEach(el=>el.onclick=()=>{
+    ST.costItems.splice(parseInt(el.dataset.ciDel),1);r0();
+  });
+  document.querySelectorAll("[data-ci-chk]").forEach(el=>el.onclick=()=>{
+    const it=ST.costItems[parseInt(el.dataset.ciChk)];if(it){it.cheapest=!it.cheapest;r0();}
+  });
+  document.querySelectorAll("[data-ci-frm]").forEach(el=>el.onclick=()=>{
+    const [i,j]=el.dataset.ciFrm.split(":").map(Number);
+    if(ST.costItems[i])ST.costItems[i].files.splice(j,1);r0();
+  });
+  const qi=document.getElementById("quote-input");
+  document.querySelectorAll("[data-ci-up]").forEach(el=>el.onclick=()=>{
+    if(!qi)return;qi.dataset.target=el.dataset.ciUp;qi.value="";qi.click();
+  });
+  if(qi)qi.onchange=async()=>{
+    const it=ST.costItems[parseInt(qi.dataset.target)];if(!it)return;
+    for(const file of Array.from(qi.files||[])){
+      if(file.size>QUOTE_MAX_MB*1024*1024){toast("⚠️ "+file.name+" is larger than "+QUOTE_MAX_MB+" MB — not added",4000);continue;}
+      if(quoteBytes()+file.size>QUOTE_MAX_TOTAL_MB*1024*1024){toast("⚠️ Total documents over "+QUOTE_MAX_TOTAL_MB+" MB — "+file.name+" not added",4000);continue;}
+      try{
+        const b64=await fileToB64(file);
+        it.files.push({name:file.name,type:file.type||"application/octet-stream",size:file.size,b64:b64});
+      }catch(e){toast("⚠️ Could not read "+file.name);}
+    }
+    r0();
+  };
+}
+
 function r0(){
   const c=document.getElementById("content");
   const CAR_REASONS=[
@@ -808,33 +926,7 @@ function r0(){
         +'<button class="type-btn'+(ST.expType==="Progetti 26"?" sel":"")+'" data-t="Progetti 26">Projects 2026</button>'
       +'</div></div>'
     +projHtml
-    +'<div class="field"><label class="lbl">Estimated total cost (€)</label>'
-      +'<input type="number" id="f-cost" placeholder="e.g. 450" value="'+ST.estimatedCost+'" style="width:100%;padding:10px 12px;border:1.5px solid #E8EEF5;border-radius:6px;font-family:sans-serif;font-size:14px;color:#1A2E42;background:#fff;outline:none;box-sizing:border-box">'
-      +(parseFloat(ST.estimatedCost)>=300
-        ?'<div style="margin-top:8px;padding:11px 13px;border-radius:7px;border:1.5px solid #FDD;background:#FFF8F8;font-family:sans-serif">'
-          +'<div style="font-size:12px;font-weight:600;color:#C62828;margin-bottom:7px">⚠️ Estimated cost ≥ €300 — cheapest option confirmation required</div>'
-          +'<div style="display:flex;align-items:flex-start;gap:8px;margin-bottom:8px;cursor:pointer" id="cost-check-row">'
-            +'<div style="width:18px;height:18px;border-radius:3px;border:1.5px solid '+(ST.costJustified?'#1F4E79':'#9AAFC5')+';background:'+(ST.costJustified?'#1F4E79':'#fff')+';flex-shrink:0;margin-top:1px;display:flex;align-items:center;justify-content:center">'
-              +(ST.costJustified?'<span style="color:#fff;font-size:11px">✓</span>':'')
-            +'</div>'
-            +'<span style="font-size:12px;color:#1A2E42">I confirm I have selected the most cost-effective option available</span>'
-          +'</div>'
-          +(ST.costJustified
-            ?'<div style="margin-bottom:8px"><label style="font-size:11px;color:#4A6880;display:block;margin-bottom:3px">Justification <span style="color:#C62828">*</span></label>'
-              +'<input type="text" id="f-cj" value="'+(ST.costJustification||'')+'" placeholder="e.g. Ryanair FR4521 €127 — only direct option; Vueling via Madrid €210" style="width:100%;padding:8px 10px;border:1px solid #E8EEF5;border-radius:5px;font-family:sans-serif;font-size:13px;color:#1A2E42;background:#fff;outline:none;box-sizing:border-box"></div>'
-              +'<div style="display:grid;grid-template-columns:1fr auto;gap:8px"><div>'
-                +'<label style="font-size:11px;color:#4A6880;display:block;margin-bottom:3px">Cheapest alternative considered</label>'
-                +'<input type="text" id="f-cad" value="'+(ST.costAltDescription||'')+'" placeholder="e.g. Easyjet via Lyon, departs 06:00, 2 stops" style="width:100%;padding:8px 10px;border:1px solid #E8EEF5;border-radius:5px;font-family:sans-serif;font-size:13px;color:#1A2E42;background:#fff;outline:none;box-sizing:border-box"></div>'
-                +'<div style="min-width:90px"><label style="font-size:11px;color:#4A6880;display:block;margin-bottom:3px">Alt. cost (€)</label>'
-                  +'<input type="number" id="f-cac" value="'+(ST.costAltCost||'')+'" placeholder="e.g. 95" style="width:100%;padding:8px 10px;border:1px solid #E8EEF5;border-radius:5px;font-family:sans-serif;font-size:13px;color:#1A2E42;background:#fff;outline:none;box-sizing:border-box"></div>'
-              +'</div>'
-              +'<div style="margin-top:7px;font-size:11px;color:#4A6880">📁 Upload comparison quotes to the mission folder once your request is approved.</div>'
-            :''
-          )
-        +'</div>'
-        :''
-      )
-    +'</div>'
+    +costItemsHtml()
     +'<div class="field" style="margin-top:6px"><label class="lbl">Car use</label>'
       +'<div style="display:flex;align-items:center;gap:12px;padding:11px 13px;border:1.5px solid '+(ST.carUse?'#1F4E79':'#E8EEF5')+';border-radius:7px;background:'+(ST.carUse?'#D6E4F0':'#F7F9FC')+';cursor:pointer" id="km-toggle">'
         +'<div style="width:38px;height:22px;border-radius:11px;background:'+(ST.carUse?'#1F4E79':'#D1D5DB')+';position:relative;flex-shrink:0;transition:background .2s">'
@@ -896,18 +988,12 @@ function r0(){
     };
   });
 
-  // Cost ≥300 justification
-  const costCheckRow=document.getElementById("cost-check-row");
-  if(costCheckRow)costCheckRow.onclick=()=>{ST.costJustified=!ST.costJustified;r0();};
-  const cjEl=document.getElementById("f-cj");if(cjEl)cjEl.oninput=e=>ST.costJustification=e.target.value;
-  const cadEl=document.getElementById("f-cad");if(cadEl)cadEl.oninput=e=>ST.costAltDescription=e.target.value;
-  const cacEl=document.getElementById("f-cac");if(cacEl)cacEl.oninput=e=>ST.costAltCost=e.target.value;
+  // Estimated cost items (each item checked individually against the €300 rule)
+  bindCostItems();
   document.getElementById("f-scope").oninput=e=>ST.scope=e.target.value;
-  document.getElementById("f-cost").onblur=e=>{ST.estimatedCost=e.target.value;r0()};
-  document.getElementById("f-cost").oninput=e=>{ST.estimatedCost=e.target.value;};
   document.querySelectorAll(".type-btn").forEach(b=>b.onclick=()=>{ST.expType=b.dataset.t;if(ST.expType!=="Progetti 26")ST.project="";r0()});
   const ps=document.getElementById("fp");if(ps)ps.onchange=e=>ST.project=e.target.value;
-  document.getElementById("fc1").onchange=e=>{ST.destCountry=e.target.value;r1()};
+  // (fc1 country select lives in Setup step r1 — binding it here crashed r0 and hid the Send button)
   const kt=document.getElementById("km-toggle");
   if(kt)kt.onclick=()=>{ST.carUse=!ST.carUse;if(!ST.carUse)ST.carReason="";r0()};
   const crDiv=document.getElementById("car-reasons");
@@ -936,9 +1022,26 @@ async function submitRequest(){
     if(!exs[i].condition)return toast("⚠️ Exception "+(i+1)+": select a condition");
     if(!exs[i].justification.trim())return toast("⚠️ Exception "+(i+1)+": enter a justification");
   }
-  // If cost ≥300 and checkbox ticked, justification text is required
-  if(parseFloat(ST.estimatedCost)>=300&&ST.costJustified&&!ST.costJustification.trim())
-    return toast("⚠️ Enter justification for the selected option");
+  // Cost items: drop empty rows, then check every item individually against the €300 rule
+  ST.costItems=(ST.costItems||[]).filter(it=>(parseFloat(it.amount)||0)>0||(it.desc||"").trim()||(it.files||[]).length);
+  const items=ST.costItems;
+  for(let i=0;i<items.length;i++){
+    const it=items[i],n="Cost item "+(i+1);
+    if(!it.cat)return toast("⚠️ "+n+": select a category");
+    if(!((parseFloat(it.amount)||0)>0))return toast("⚠️ "+n+": enter the estimated amount");
+    if(isOverLimit(it)){
+      if(!it.cheapest){r0();return toast("⚠️ "+n+" (≥ €"+COST_LIMIT+"): confirm it is the most cost-effective option",4000);}
+      if(!(it.justification||"").trim()){r0();return toast("⚠️ "+n+" (≥ €"+COST_LIMIT+"): enter a justification",4000);}
+      if(!(it.files||[]).length){r0();return toast("⚠️ "+n+" (≥ €"+COST_LIMIT+"): upload at least one supporting document",4000);}
+    }
+  }
+  const bigItems=items.filter(isOverLimit);
+  ST.estimatedCost=String(costTotal());
+  ST.costJustified=bigItems.length>0&&bigItems.every(it=>it.cheapest);
+  const eur=n=>"€"+rnd2(n).toFixed(2);
+  ST.costJustification=bigItems.map(it=>it.cat+" "+eur(it.amount)+": "+it.justification.trim()).join(" | ");
+  ST.costAltDescription=bigItems.filter(it=>(it.altDescription||"").trim()||it.altCost).map(it=>it.cat+": "+(it.altDescription||"").trim()+(it.altCost?" ("+eur(it.altCost)+")":"")).join(" | ");
+  ST.costAltCost=String(rnd2(bigItems.reduce((s,it)=>s+(parseFloat(it.altCost)||0),0)));
 
   const btn=document.getElementById("b0n");
   btn.textContent="⏳ Sending...";btn.disabled=true;
@@ -964,7 +1067,19 @@ async function submitRequest(){
     costJustified:ST.costJustified,
     costJustification:ST.costJustification||"",
     costAltDescription:ST.costAltDescription||"",
-    costAltCost:parseFloat(ST.costAltCost)||0
+    costAltCost:parseFloat(ST.costAltCost)||0,
+    // Itemised estimate — each item checked individually against the €300 rule
+    costItems:items.map((it,i)=>({n:i+1,category:it.cat,description:(it.desc||"").trim(),amount:rnd2(it.amount),
+      over300:isOverLimit(it),cheapestConfirmed:isOverLimit(it)?!!it.cheapest:false,
+      justification:isOverLimit(it)?(it.justification||"").trim():"",
+      altDescription:isOverLimit(it)?(it.altDescription||"").trim():"",
+      altCost:isOverLimit(it)?(parseFloat(it.altCost)||0):0,
+      documents:(it.files||[]).map(f=>f.name).join(", ")})),
+    costItemsSummary:items.map((it,i)=>(i+1)+". "+it.cat+(it.desc?" – "+it.desc.trim():"")+": €"+rnd2(it.amount).toFixed(2)
+      +(isOverLimit(it)?" [≥€"+COST_LIMIT+" — cheapest confirmed; "+it.justification.trim()+(it.altDescription?"; alt: "+it.altDescription.trim():"")+(it.altCost?" €"+rnd2(it.altCost).toFixed(2):"")+"; "+(it.files||[]).length+" doc(s)]":"")).join("\n"),
+    // Supporting documents for items ≥ €300 (the flow saves them to the mission folder / attaches them to the approval)
+    attachmentCount:items.reduce((s,it)=>s+(it.files||[]).length,0),
+    attachments:[].concat(...items.map((it,i)=>(it.files||[]).map(f=>({item:i+1,category:it.cat,name:f.name,contentType:f.type,contentBase64:f.b64}))))
   };
 
   // Show confirmation immediately — PA call happens in background
@@ -994,7 +1109,7 @@ function r1(){
     const parts=ST.auth.toUpperCase().split("-");
     if(parts.length>=4){
       const cognome=parts[3];
-      const found=EMP.find(e=>e.name.toUpperCase()===cognome||e.id.toUpperCase()===cognome);
+      const found=EMP.find(e=>e.name.toUpperCase().split(" ").pop()===cognome||e.name.toUpperCase()===cognome||e.id.toUpperCase()===cognome);
       if(found){ST.emp=found;ST.kmApproved=(found.id==="nicola");}
     }
   }
@@ -1281,15 +1396,12 @@ function r3(){
       return '<div class="s-item" style="grid-column:1/-1"><div class="s-label">Allowance days</div>'
         +'<div class="s-val" style="font-size:12px">'+(ST.programmeDays||0)+' programme + '+(ST.travelDays||0)+' travel'+exNote+'</div></div>';})()
     :'';
-  const costAlert=(parseFloat(ST.estimatedCost)>=300&&ST.costJustified)
+  const bigCost=(ST.costItems||[]).filter(isOverLimit);
+  const costAlert=bigCost.length
     ?'<div style="margin-bottom:10px;padding:8px 12px;border-radius:6px;font-size:12px;background:#FFF8F8;color:#C62828;border-left:3px solid #C62828;font-family:sans-serif">'
-      +'⚠️ Cost ≥ €300 — upload comparison quotes to the mission folder before reimbursement'
+      +'📎 '+bigCost.length+' cost item'+(bigCost.length>1?'s':'')+' ≥ €'+COST_LIMIT+' ('+bigCost.map(it=>esc(it.cat)).join(', ')+') documented with the authorization request'
     +'</div>'
-    :(parseFloat(ST.estimatedCost)>=300&&!ST.costJustified)
-      ?'<div style="margin-bottom:10px;padding:8px 12px;border-radius:6px;font-size:12px;background:#FFF3E0;color:#E65100;border-left:3px solid #E65100;font-family:sans-serif">'
-        +'⚠️ Cost ≥ €300 — cheapest option confirmation was not completed. Please go back to Step 0.'
-      +'</div>'
-      :'';
+    :'';
   const dupAlert=dups>0
     ?'<div class="alert-warn">⚠️ '+dups+' potential duplicate(s) detected — review below</div>'
     :'';
